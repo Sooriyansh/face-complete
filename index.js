@@ -2,9 +2,9 @@ require('./config/testingEnv').applyTestingEnvDefaults();
 
 const express = require('express');
 const http = require('http');
-const mongoose = require('mongoose');
 const path = require('path');
 
+const { connectDatabase } = require('./config/database');
 const { attachCurrentUser } = require('./middleware/auth');
 const { defaultViewLocals } = require('./middleware/locals');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -15,12 +15,6 @@ const { initializeSockets } = require('./sockets');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const MONGO_URI = process.env.MONGO_URI;
-
-mongoose
-  .connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch((error) => console.error('MongoDB connection error:', error.message));
 
 app.set('view engine', 'ejs');
 app.set('views', [
@@ -43,9 +37,15 @@ const server = http.createServer(app);
 initializeSockets(server, app);
 initializeNotificationJobs();
 
-server.listen(PORT, () => {
-  console.log(`Server running on port http://localhost:${PORT}`);
-  getWorkerProcess()
-    .then(() => console.log('Face recognition worker warmed up'))
-    .catch((error) => console.warn('Face recognition warmup skipped:', error.message));
-});
+connectDatabase()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`Server running on port http://localhost:${PORT}`);
+      getWorkerProcess()
+        .then(() => console.log('Face recognition worker warmed up'))
+        .catch((error) => console.warn('Face recognition warmup skipped:', error.message));
+    });
+  })
+  .catch(() => {
+    process.exitCode = 1;
+  });

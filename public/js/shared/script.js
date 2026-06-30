@@ -1888,6 +1888,103 @@ if (exportSystemEventsButton) {
   });
 }
 
+function prependActivityEvent(event) {
+  const timeline = document.getElementById('system-events-body') || document.querySelector('#personal-events .timeline-stream');
+  if (!timeline || !event) return;
+
+  const cssEscape = window.CSS && typeof window.CSS.escape === 'function'
+    ? window.CSS.escape
+    : (value) => String(value).replace(/["\\]/g, '\\$&');
+  const existing = event.externalId ? timeline.querySelector(`[data-external-id="${cssEscape(String(event.externalId))}"]`) : null;
+  if (existing) return;
+
+  const empty = timeline.querySelector('strong');
+  if (empty && /No activity recorded yet/i.test(empty.textContent || '')) {
+    timeline.innerHTML = '';
+  }
+
+  const item = document.createElement('div');
+  item.className = 'event-row';
+  item.dataset.externalId = event.externalId || '';
+  item.dataset.user = event.employeeName || event.user || 'Unknown';
+  const duration = Number(event.durationMs || 0) > 0 ? formatShortDuration(event.durationMs) : '-';
+  if (document.getElementById('system-events-body')) {
+    item.innerHTML = `
+      <span class="event-dot"></span>
+      <strong>${escapeHtml(event.event || 'Activity Event')}</strong>
+      <div class="event-meta-grid">
+        <span><b>Timestamp</b>${escapeHtml(new Date(event.occurredAt).toLocaleString())}</span>
+        <span><b>Event Type</b>${escapeHtml(event.eventType || event.event || '-')}</span>
+        <span><b>Device Info</b>${escapeHtml(event.hostname || event.computer || event.provider || event.sourceLog || '-')}</span>
+        <span><b>Employee Name</b>${escapeHtml(event.employeeName || event.user || 'Unknown')}</span>
+        <span><b>Machine</b>${escapeHtml(event.machineId || '-')}</span>
+        <span><b>Duration</b>${escapeHtml(duration)}</span>
+      </div>
+    `;
+  } else {
+    item.innerHTML = `
+      <span class="event-dot"></span>
+      <strong>${escapeHtml(event.event || 'Activity')}</strong>
+      <p>${escapeHtml(new Date(event.occurredAt).toLocaleString())} - ${escapeHtml(event.meaning || event.sourceLog || 'System event')}</p>
+    `;
+  }
+  timeline.prepend(item);
+}
+
+function updateEmployeeActivityStatus(event) {
+  if (!event) return;
+  const statusEl = document.getElementById('employee-current-status');
+  const internetEl = document.getElementById('employee-internet-status');
+  const agentEl = document.getElementById('employee-agent-status');
+  const machineEl = document.getElementById('employee-machine-status');
+  if (!statusEl && !internetEl && !agentEl && !machineEl) return;
+
+  const name = event.event || '';
+  if (statusEl) {
+    if (['Agent Offline', 'Shutdown', 'Unexpected Shutdown', 'Network Offline', 'Internet Disconnected'].includes(name)) statusEl.textContent = 'Offline';
+    else if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(name)) statusEl.textContent = 'Idle';
+    else if (name === 'Sleep') statusEl.textContent = 'Sleeping';
+    else if (['Lock', 'Screen Lock'].includes(name)) statusEl.textContent = 'Locked';
+    else statusEl.textContent = 'Online';
+  }
+  if (internetEl && ['Internet Connected', 'Network Online', 'Internet Disconnected', 'Network Offline'].includes(name)) {
+    internetEl.textContent = ['Internet Connected', 'Network Online'].includes(name) ? 'Online' : 'Offline';
+  }
+  if (agentEl && ['Agent Online', 'Agent Offline'].includes(name)) {
+    agentEl.textContent = name === 'Agent Online' ? 'Connected' : 'Offline';
+  }
+  if (machineEl && (event.hostname || event.computer || event.machineId)) {
+    machineEl.textContent = event.hostname || event.computer || event.machineId;
+  }
+}
+
+function initActivityRealtime() {
+  const hasActivityTimeline = document.getElementById('system-events-body') || document.querySelector('#personal-events .timeline-stream');
+  if (!hasActivityTimeline || typeof io !== 'function') return;
+
+  const socket = io({ withCredentials: true, reconnection: true });
+  socket.on('connect', () => {
+    const sync = document.getElementById('system-events-sync');
+    if (sync) sync.textContent = 'Live';
+  });
+  socket.on('disconnect', () => {
+    const sync = document.getElementById('system-events-sync');
+    if (sync) sync.textContent = 'Reconnecting';
+  });
+  ['activity:event', 'system_event:new'].forEach((name) => {
+    socket.on(name, (event) => {
+      prependActivityEvent(event);
+      updateEmployeeActivityStatus(event);
+      renderSystemEventsLiveFeed([event]);
+      if (document.getElementById('system-events-count')) {
+        refreshSystemEvents().catch(() => {});
+      }
+    });
+  });
+}
+
+initActivityRealtime();
+
 const workScheduleForm = document.getElementById('work-schedule-form');
 if (workScheduleForm) {
   workScheduleForm.addEventListener('submit', async (event) => {

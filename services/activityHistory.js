@@ -46,6 +46,11 @@ function serializeSystemEvent(event = {}) {
     sourceLog: event.sourceLog || '',
     provider: event.provider || '',
     computer: event.computer || event.deviceName || '',
+    hostname: event.hostname || event.computer || event.deviceName || '',
+    machineId: event.machineId || event.metadata?.machineId || event.metadata?.agentId || '',
+    operatingSystem: event.operatingSystem || event.metadata?.operatingSystem || '',
+    applicationVersion: event.applicationVersion || event.metadata?.applicationVersion || '',
+    browser: event.browser || event.metadata?.browser || '',
     deviceName: event.computer || event.deviceName || '',
     ipAddress: event.ipAddress || event.metadata?.ipAddress || '',
     employee: employee?._id || event.employee || null,
@@ -57,6 +62,9 @@ function serializeSystemEvent(event = {}) {
     durationMs: Number(event.durationMs || 0),
     sessionId: event.sessionId || event.metadata?.sessionId || '',
     status: event.status || 'Recorded',
+    eventType: event.eventType || event.metadata?.eventType || 'system',
+    eventName: event.eventName || event.event || event.type || 'Activity',
+    metadata: event.metadata || {},
     externalId: event.externalId || String(event._id || ''),
   };
 }

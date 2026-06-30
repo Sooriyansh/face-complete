@@ -6,6 +6,7 @@ const {
   baseEvent,
   collectActiveWindow,
   collectEventLogEvents,
+  collectInternet,
   collectIdle,
   collectNetwork,
   collectProcesses,
@@ -18,6 +19,7 @@ const state = loadState();
 async function collectAll() {
   const groups = [];
   groups.push(collectNetwork(state));
+  groups.push(await collectInternet(state));
   groups.push(collectSystemVitals(state));
   groups.push(await collectEventLogEvents(state));
   groups.push(await collectIdle(state));
@@ -42,7 +44,7 @@ async function main() {
     throw new Error('The Windows activity agent must run on Windows.');
   }
   if (!config.collectorToken) {
-    throw new Error('FACEAI_COLLECTOR_TOKEN is required.');
+    throw new Error('SYSTEM_EVENTS_COLLECTOR_TOKEN or FACEAI_COLLECTOR_TOKEN is required.');
   }
 
   await syncEvents([baseEvent('Agent Online', 'Windows activity agent started.', { status: 'Online', unique: `agent-online:${Date.now()}` })]);

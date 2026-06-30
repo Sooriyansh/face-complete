@@ -4,6 +4,7 @@ const SystemEvent = require('../../models/SystemEvent');
 const Student = require('../../models/Student');
 const WorkSession = require('../../models/WorkSession');
 const { serializeSystemEvent } = require('../../services/activityHistory');
+const { mirrorActivityEvent } = require('../../services/activityMirrors');
 const { rowsToCsv } = require('../../services/hrms');
 const { emitEmployeeEvent, emitRoleEvent } = require('../../services/notifications');
 const { recordTrackingEvent } = require('../../services/workSessions');
@@ -15,10 +16,14 @@ function sendSystemEventsExport(res, type, rows) {
     { label: 'Employee ID', value: (row) => row.employeeId || '-' },
     { label: 'Employee', value: (row) => row.employeeName || row.user || 'Unknown' },
     { label: 'Event', value: (row) => row.event },
+    { label: 'Event Type', value: (row) => row.eventType || '-' },
     { label: 'Occurred At', value: (row) => new Date(row.occurredAt).toLocaleString() },
     { label: 'Meaning', value: (row) => row.meaning || row.message || '-' },
     { label: 'Source', value: (row) => row.sourceLog || row.provider || '-' },
     { label: 'Computer', value: (row) => row.computer || '-' },
+    { label: 'Machine ID', value: (row) => row.machineId || row.metadata?.agentId || '-' },
+    { label: 'Session ID', value: (row) => row.sessionId || row.metadata?.sessionId || '-' },
+    { label: 'IP Address', value: (row) => row.ipAddress || row.metadata?.ipAddress || '-' },
     { label: 'Status', value: (row) => row.status || 'Recorded' },
     { label: 'Duration Ms', value: (row) => row.durationMs || 0 },
   ];
@@ -36,18 +41,27 @@ function sendSystemEventsExport(res, type, rows) {
 
 const ALLOWED_EVENTS = new Set([
   'Startup',
+  'System Startup',
   'Shutdown',
+  'System Shutdown',
   'Unexpected Shutdown',
   'Restart',
+  'System Restart',
   'Sleep',
+  'Wake',
   'Wakeup',
+  'Wake Up',
   'System Wake',
   'Lock',
   'Unlock',
   'Screen Lock',
   'Screen Unlock',
+  'Lock Screen',
+  'Unlock Screen',
   'Login',
   'Logout',
+  'Windows Login',
+  'Windows Logout',
   'Windows Sign In',
   'Windows Sign Out',
   'Idle Time',
@@ -73,6 +87,8 @@ const ALLOWED_EVENTS = new Set([
   'Session Disconnect',
   'Network Online',
   'Network Offline',
+  'Internet Connected',
+  'Internet Disconnected',
   'System Boot Time',
   'System Uptime',
   'Agent Online',
@@ -126,8 +142,14 @@ function normalizeSystemEvent(rawEvent) {
     return null;
   }
 
+  const metadata = rawEvent.metadata && typeof rawEvent.metadata === 'object' ? rawEvent.metadata : {};
+  const eventType = String(rawEvent.eventType || metadata.eventType || inferEventType(event)).trim().slice(0, 80);
+  const browser = String(rawEvent.browser || metadata.browser || '').trim().slice(0, 120);
+
   return {
     event,
+    eventName: String(rawEvent.eventName || event).trim().slice(0, 200),
+    eventType,
     meaning: String(rawEvent.meaning || '').trim().slice(0, 500),
     occurredAt,
     eventId,
@@ -135,6 +157,13 @@ function normalizeSystemEvent(rawEvent) {
     provider: String(rawEvent.provider || '').trim().slice(0, 200),
     recordNumber: Number.isFinite(Number(rawEvent.recordNumber)) ? Number(rawEvent.recordNumber) : null,
     computer: String(rawEvent.computer || '').trim().slice(0, 200),
+    sessionId: String(rawEvent.sessionId || metadata.sessionId || '').trim().slice(0, 200),
+    machineId: String(rawEvent.machineId || metadata.machineId || metadata.agentId || '').trim().slice(0, 200),
+    hostname: String(rawEvent.hostname || rawEvent.computer || metadata.hostname || '').trim().slice(0, 200),
+    operatingSystem: String(rawEvent.operatingSystem || metadata.operatingSystem || '').trim().slice(0, 200),
+    applicationVersion: String(rawEvent.applicationVersion || metadata.applicationVersion || '').trim().slice(0, 80),
+    browser,
+    ipAddress: String(rawEvent.ipAddress || metadata.ipAddress || '').trim().slice(0, 80),
     employee: String(rawEvent.employee || rawEvent.employeeObjectId || '').match(/^[a-f\d]{24}$/i)
       ? String(rawEvent.employee || rawEvent.employeeObjectId)
       : null,
@@ -143,10 +172,19 @@ function normalizeSystemEvent(rawEvent) {
     user: String(rawEvent.user || '').trim().slice(0, 200),
     durationMs: Math.max(Number(rawEvent.durationMs || rawEvent.duration || 0), 0),
     status: String(rawEvent.status || 'Recorded').trim().slice(0, 80),
-    metadata: rawEvent.metadata && typeof rawEvent.metadata === 'object' ? rawEvent.metadata : {},
+    metadata,
     message: String(rawEvent.message || '').trim().slice(0, 2000),
     externalId: externalId.slice(0, 500),
   };
+}
+
+function inferEventType(event) {
+  if (['Sleep', 'Wake', 'Wakeup', 'Wake Up', 'System Wake', 'Startup', 'System Startup', 'Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Restart', 'System Restart', 'System Boot Time', 'System Uptime'].includes(event)) return 'power';
+  if (['Network Online', 'Network Offline', 'Internet Connected', 'Internet Disconnected'].includes(event)) return 'network';
+  if (['Idle Time', 'Idle State', 'Active Usage', 'Active State', 'Inactive Duration'].includes(event)) return 'activity';
+  if (['Website Visited', 'Active Window', 'Active Application', 'Application Switch', 'App Opened', 'App Closed', 'Application Started', 'Application Stopped'].includes(event)) return event === 'Website Visited' ? 'browser' : 'application';
+  if (['Login', 'Logout', 'Windows Login', 'Windows Logout', 'Windows Sign In', 'Windows Sign Out', 'User Session Start', 'User Session End', 'Session Connect', 'Session Disconnect', 'Lock', 'Unlock', 'Screen Lock', 'Screen Unlock', 'Lock Screen', 'Unlock Screen'].includes(event)) return 'session';
+  return 'system';
 }
 
 function dateOnlyRange(value) {
@@ -292,6 +330,15 @@ router.get('/', async (req, res, next) => {
     if (selectedEvents.length) {
       query.event = { $in: selectedEvents };
     }
+    if (req.query.machine) {
+      query.$and = [
+        ...(query.$and || []),
+        { $or: compactOrQuery([{ machineId: String(req.query.machine) }, { hostname: String(req.query.machine) }, { computer: String(req.query.machine) }]) },
+      ];
+    }
+    if (req.query.status) {
+      query.status = String(req.query.status);
+    }
 
     if (req.user?.role === 'employee') {
       const employee = await Student.findOne({ email: req.user.email }).lean();
@@ -389,6 +436,15 @@ router.get('/export/:type', async (req, res, next) => {
     if (selectedEvents.length) {
       query.event = { $in: selectedEvents };
     }
+    if (req.query.machine) {
+      query.$and = [
+        ...(query.$and || []),
+        { $or: compactOrQuery([{ machineId: String(req.query.machine) }, { hostname: String(req.query.machine) }, { computer: String(req.query.machine) }]) },
+      ];
+    }
+    if (req.query.status) {
+      query.status = String(req.query.status);
+    }
     const events = await SystemEvent.find(query).sort({ occurredAt: -1 }).limit(limit).lean();
     return sendSystemEventsExport(res, req.params.type, events);
   } catch (error) {
@@ -431,6 +487,15 @@ router.get('/dashboard-summary', async (req, res, next) => {
     if (selectedEvents.length) {
       query.event = { $in: selectedEvents };
     }
+    if (req.query.machine) {
+      query.$and = [
+        ...(query.$and || []),
+        { $or: compactOrQuery([{ machineId: String(req.query.machine) }, { hostname: String(req.query.machine) }, { computer: String(req.query.machine) }]) },
+      ];
+    }
+    if (req.query.status) {
+      query.status = String(req.query.status);
+    }
 
     const [events, latestByEmployee, liveSessions] = await Promise.all([
       SystemEvent.find(query).sort({ occurredAt: -1 }).limit(1000).lean(),
@@ -467,12 +532,16 @@ router.get('/dashboard-summary', async (req, res, next) => {
       if (['Shutdown', 'Unexpected Shutdown', 'Agent Offline', 'Network Offline'].includes(statusEvent)) status = 'Offline';
       if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(statusEvent)) status = 'Idle';
       if (['Lock', 'Screen Lock'].includes(statusEvent)) status = 'Locked';
+      if (statusEvent === 'Sleep') status = 'Sleeping';
       return {
         employee: latest.employee,
         employeeId: latest.employeeId,
         employeeName: latest.employeeName || latest.user || 'Unknown',
         status,
         activeApplication: latest.metadata?.processName || latest.metadata?.application || latest.metadata?.windowTitle || '',
+        machineId: latest.machineId || latest.metadata?.machineId || latest.metadata?.agentId || '',
+        hostname: latest.hostname || latest.computer || '',
+        internetStatus: ['Internet Connected', 'Network Online'].includes(statusEvent) ? 'Online' : ['Internet Disconnected', 'Network Offline'].includes(statusEvent) ? 'Offline' : '',
         lastActivityAt: latest.occurredAt,
       };
     });
@@ -584,8 +653,11 @@ router.post('/ingest', async (req, res, next) => {
       { ordered: false }
     );
 
-    await Promise.all(events.map((event) => recordTrackingEvent(event)));
-    await Promise.allSettled(getUpsertedOperationIndexes(result).map(async (index) => {
+    const insertedIndexes = getUpsertedOperationIndexes(result);
+    const insertedEvents = insertedIndexes.map((index) => events[index]).filter(Boolean);
+    await Promise.all(insertedEvents.map((event) => recordTrackingEvent(event)));
+    await Promise.all(insertedEvents.map((event) => mirrorActivityEvent(event)));
+    await Promise.allSettled(insertedIndexes.map(async (index) => {
       const event = events[index];
       if (!event) return;
       const payload = serializeSystemEvent({

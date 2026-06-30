@@ -15,14 +15,18 @@ The agent does not generate demo data. Events are sent to `/api/system-events/in
 
 ## Configure
 
-Copy `.env.example` to `.env` and set:
+Copy `.env.example` to `.env`. The agent auto-detects safe defaults:
 
 ```text
-FACEAI_SERVER_URL=http://localhost:8080
-FACEAI_COLLECTOR_TOKEN=<same as SYSTEM_EVENTS_COLLECTOR_TOKEN on server>
-FACEAI_EMPLOYEE_ID=<employee roll number/code>
-FACEAI_EMPLOYEE_NAME=<employee name>
+FACEAI_SERVER_URL=
+FACEAI_COLLECTOR_TOKEN=
+FACEAI_EMPLOYEE_ID=
+FACEAI_EMPLOYEE_NAME=
 ```
+
+`FACEAI_SERVER_URL` is inferred from `FACEAI_PUBLIC_URL`, `PUBLIC_URL`, `APP_URL`, `BASE_URL`, common production host variables, or local `PORT`.
+`FACEAI_COLLECTOR_TOKEN` is inferred from `SYSTEM_EVENTS_COLLECTOR_TOKEN` when the main server `.env` is available.
+Employee ID/name fall back to the current Windows user. Set explicit values when you need a different HRMS employee code or production public URL.
 
 ## Run once
 

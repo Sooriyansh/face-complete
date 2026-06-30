@@ -57,6 +57,56 @@ const systemEventSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    sessionId: {
+      type: String,
+      default: '',
+      trim: true,
+      index: true,
+    },
+    machineId: {
+      type: String,
+      default: '',
+      trim: true,
+      index: true,
+    },
+    hostname: {
+      type: String,
+      default: '',
+      trim: true,
+      index: true,
+    },
+    operatingSystem: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    applicationVersion: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    browser: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    ipAddress: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    eventType: {
+      type: String,
+      default: 'system',
+      trim: true,
+      index: true,
+    },
+    eventName: {
+      type: String,
+      default: '',
+      trim: true,
+      index: true,
+    },
     user: {
       type: String,
       default: '',
@@ -101,5 +151,8 @@ systemEventSchema.index({ sourceLog: 1, eventId: 1, recordNumber: 1 });
 systemEventSchema.index({ employee: 1, event: 1, occurredAt: -1 });
 systemEventSchema.index({ employeeId: 1, event: 1, occurredAt: -1 });
 systemEventSchema.index({ status: 1, occurredAt: -1 });
+systemEventSchema.index({ machineId: 1, occurredAt: -1 });
+systemEventSchema.index({ sessionId: 1, occurredAt: -1 });
+systemEventSchema.index({ eventType: 1, eventName: 1, occurredAt: -1 });
 
 module.exports = mongoose.model('SystemEvent', systemEventSchema);

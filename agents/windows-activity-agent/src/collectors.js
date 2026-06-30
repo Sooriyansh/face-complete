@@ -1,4 +1,5 @@
 const os = require('os');
+const dns = require('dns').promises;
 const config = require('./config');
 const { json } = require('./powershell');
 
@@ -9,6 +10,20 @@ function currentUser() {
   return process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${info.username}` : info.username;
 }
 
+function localIpAddress() {
+  return Object.values(os.networkInterfaces()).flat().find((net) => net && !net.internal && net.family === 'IPv4' && net.address)?.address || '';
+}
+
+function eventTypeFor(name) {
+  if (['Sleep', 'Wake', 'Wakeup', 'System Wake', 'Startup', 'Shutdown', 'Unexpected Shutdown', 'Restart', 'System Boot Time', 'System Uptime'].includes(name)) return 'power';
+  if (['Network Online', 'Network Offline', 'Internet Connected', 'Internet Disconnected'].includes(name)) return 'network';
+  if (['Idle Time', 'Idle State', 'Active Usage', 'Active State', 'Inactive Duration'].includes(name)) return 'activity';
+  if (name === 'Website Visited') return 'browser';
+  if (['Application Switch', 'Active Application', 'Application Started', 'Application Stopped'].includes(name)) return 'application';
+  if (['Screen Lock', 'Screen Unlock', 'Windows Sign In', 'Windows Sign Out', 'Session Connect', 'Session Disconnect'].includes(name)) return 'session';
+  return 'system';
+}
+
 function baseEvent(name, meaning, details = {}) {
   const occurredAt = details.occurredAt ? new Date(details.occurredAt) : new Date();
   const millis = occurredAt.getTime();
@@ -17,6 +32,8 @@ function baseEvent(name, meaning, details = {}) {
   const identity = `${config.agentId}:${name}:${details.unique || millis}`;
   return {
     event: name,
+    eventName: details.eventName || name,
+    eventType: details.eventType || eventTypeFor(name),
     meaning,
     occurredAt: occurredAt.toISOString(),
     eventId: Number(details.eventId || 0),
@@ -24,6 +41,13 @@ function baseEvent(name, meaning, details = {}) {
     provider,
     recordNumber: details.recordNumber || null,
     computer: config.computer,
+    hostname: config.computer,
+    machineId: config.machineId,
+    sessionId: config.sessionId,
+    operatingSystem: config.operatingSystem,
+    applicationVersion: config.applicationVersion,
+    browser: details.browser || details.metadata?.browser || '',
+    ipAddress: details.ipAddress || localIpAddress(),
     employeeId: config.employeeId,
     employeeName: config.employeeName,
     user: currentUser(),
@@ -32,6 +56,11 @@ function baseEvent(name, meaning, details = {}) {
     message: details.message || meaning,
     metadata: {
       agentId: config.agentId,
+      machineId: config.machineId,
+      sessionId: config.sessionId,
+      hostname: config.computer,
+      operatingSystem: config.operatingSystem,
+      applicationVersion: config.applicationVersion,
       ...(details.metadata || {}),
     },
     externalId: details.externalId || `${source}:${identity}`,
@@ -247,6 +276,22 @@ function collectNetwork(state) {
   })];
 }
 
+async function collectInternet(state) {
+  let connected = false;
+  try {
+    await dns.lookup('one.one.one.one');
+    connected = true;
+  } catch {
+    connected = false;
+  }
+  if (state.internetConnected === connected) return [];
+  state.internetConnected = connected;
+  return [baseEvent(connected ? 'Internet Connected' : 'Internet Disconnected', connected ? 'Internet DNS resolution is available.' : 'Internet DNS resolution failed.', {
+    status: connected ? 'Online' : 'Offline',
+    unique: `internet:${connected}:${Date.now()}`,
+  })];
+}
+
 function collectSystemVitals(state) {
   const bootMs = Date.now() - os.uptime() * 1000;
   const bootKey = String(Math.floor(bootMs / 1000));
@@ -273,6 +318,7 @@ module.exports = {
   baseEvent,
   collectActiveWindow,
   collectEventLogEvents,
+  collectInternet,
   collectIdle,
   collectNetwork,
   collectProcesses,

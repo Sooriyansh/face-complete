@@ -21,6 +21,7 @@ function loadState() {
     processes: {},
     activeWindow: null,
     networkOnline: null,
+    internetConnected: null,
     idle: false,
     sessionStartedAt: new Date().toISOString(),
   });
