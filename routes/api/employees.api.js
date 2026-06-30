@@ -218,7 +218,7 @@ router.patch('/:studentId/enrollment-status', async (req, res, next) => {
         enrollmentReviewedAt: new Date(),
         enrollmentReviewNote: String(req.body.note || '').trim(),
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
 
     if (!student) {

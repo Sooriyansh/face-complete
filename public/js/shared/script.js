@@ -2850,9 +2850,12 @@ window.setInterval(updateSessionTimer, 1000);
 
 if (document.getElementById('daily-work-session')) {
   loadDailyWorkSession().catch((error) => showToast(error.message));
-  loadEmployeeHrmsSummary().catch((error) => showToast(error.message));
   startEmployeeActivityCollector();
   window.setInterval(() => loadDailyWorkSession().catch(() => {}), 15000);
+}
+
+if (document.getElementById('daily-work-session') || document.getElementById('leave-management') || document.getElementById('overtime-tracking')) {
+  loadEmployeeHrmsSummary().catch((error) => showToast(error.message));
   window.setInterval(() => loadEmployeeHrmsSummary().catch(() => {}), 10000);
 }
 
@@ -3288,6 +3291,36 @@ const NotificationCenter = (() => {
     return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
   }
 
+  function applyScheduleToUI(schedule) {
+    if (!schedule) return;
+    const fmt12 = (t) => { 
+      if (!t) return '--:--'; 
+      const [h, m] = t.split(':').map(Number); 
+      const ampm = h >= 12 ? 'PM' : 'AM'; 
+      const h12 = h % 12 || 12; 
+      return h12 + ':' + String(m).padStart(2,'0') + ' ' + ampm; 
+    };
+    const elements = document.querySelectorAll('[data-schedule-field]');
+    elements.forEach(el => {
+      const field = el.dataset.scheduleField;
+      if (schedule[field] !== undefined) {
+        if (['officeJoinTime', 'checkOutTime', 'overtimeStartTime'].includes(field)) {
+          el.textContent = fmt12(schedule[field]);
+        } else if (field === 'workingHours') {
+          el.textContent = schedule[field] + ' hrs';
+        } else if (['breakMinutes', 'gracePeriodMinutes'].includes(field)) {
+          el.textContent = schedule[field] + ' min';
+        } else {
+          el.textContent = schedule[field];
+        }
+      }
+    });
+    const lastUpdated = document.getElementById('schedule-last-updated');
+    if (lastUpdated && schedule.updatedAt) {
+      lastUpdated.innerHTML = `<i class="fa-solid fa-rotate"></i> Last updated: ${new Date(schedule.updatedAt).toLocaleString()}`;
+    }
+  }
+
   function connectSocket() {
     if (typeof io !== 'function' || state.socketReady) return;
     const socket = io({ withCredentials: true });
@@ -3295,6 +3328,40 @@ const NotificationCenter = (() => {
       state.socketReady = true;
     });
     socket.on('notification:new', handleRealtime);
+    socket.on('schedule:updated', (schedule) => {
+      applyScheduleToUI(schedule);
+      showToast('Work schedule updated by Admin.', 'info');
+    });
+
+    socket.on('system_event:new', (event) => {
+      const type = event.event || event.type || '';
+      if (['Login', 'Logout', 'Windows Login', 'Windows Logout'].includes(type)) {
+        const el = document.getElementById('metric-signin-count');
+        if (el) el.textContent = parseInt(el.textContent || '0', 10) + 1;
+      } else if (['Lock', 'Unlock'].includes(type)) {
+        const el = document.getElementById('metric-lock-count');
+        if (el) el.textContent = parseInt(el.textContent || '0', 10) + 1;
+      } else if (['Sleep', 'Wakeup', 'Wake Up'].includes(type)) {
+        const el = document.getElementById('metric-sleep-count');
+        if (el) el.textContent = parseInt(el.textContent || '0', 10) + 1;
+      }
+      const totalEl = document.getElementById('metric-total-activities');
+      if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || '0', 10) + 1;
+    });
+
+    socket.on('work_session:updated', (session) => {
+      const prodEl = document.getElementById('session-productivity');
+      if (prodEl) prodEl.textContent = (session.productivityScore || 0) + '%';
+      
+      const evtCountEl = document.getElementById('session-event-count');
+      if (evtCountEl) evtCountEl.textContent = session.events ? session.events.length : 0;
+      
+      const activeEl = document.getElementById('session-active-time');
+      if (activeEl) activeEl.textContent = Math.round((session.activeMs || 0) / 60000) + ' min';
+      
+      const idleEl = document.getElementById('session-idle-time');
+      if (idleEl) idleEl.textContent = Math.round((session.idleMs || 0) / 60000) + ' min';
+    });
   }
 
   function bind() {

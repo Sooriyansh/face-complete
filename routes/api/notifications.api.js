@@ -119,7 +119,7 @@ router.post('/:id/read', async (req, res, next) => {
     const notification = await Notification.findOneAndUpdate(
       { _id: req.params.id, ...query },
       { isRead: true, readAt: new Date() },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!notification) {

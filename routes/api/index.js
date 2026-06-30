@@ -24,12 +24,38 @@ router.get('/work-schedule', requireAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+// Employee-facing alias for fetching the current schedule
+router.get('/employee/work-schedule', requireAuth, async (req, res, next) => {
+  try {
+    res.json({ success: true, schedule: await getWorkSchedule() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/work-schedule', requireAuth, async (req, res, next) => {
   try {
     if (req.user?.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Only admin can update work schedule settings.' });
     }
-    res.json({ success: true, schedule: await saveWorkSchedule(req.body, req.user?._id || null) });
+    const schedule = await saveWorkSchedule(req.body, req.user?._id || null);
+
+    // Broadcast updated schedule to all connected employees in real-time
+    const io = req.app.locals.io;
+    if (io) {
+      io.to('role:employee').emit('schedule:updated', {
+        officeJoinTime: schedule.officeJoinTime,
+        checkOutTime: schedule.checkOutTime,
+        workingHours: schedule.workingHours,
+        breakMinutes: schedule.breakMinutes,
+        gracePeriodMinutes: schedule.gracePeriodMinutes,
+        overtimeStartTime: schedule.overtimeStartTime,
+        updatedAt: schedule.updatedAt || new Date(),
+      });
+    }
+
+    res.json({ success: true, schedule });
   } catch (error) {
     next(error);
   }

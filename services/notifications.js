@@ -126,6 +126,30 @@ async function emitRealtime(notification) {
   userIds.forEach((id) => ioServer.to(userRoom(id)).emit('notification:new', payload));
 }
 
+function emitUserEvent(userId, eventName, payload) {
+  if (!ioServer) return;
+  ioServer.to(userRoom(userId)).emit(eventName, payload);
+}
+
+function emitRoleEvent(role, eventName, payload) {
+  if (!ioServer || !role) return;
+  ioServer.to(roleRoom(role)).emit(eventName, payload);
+}
+
+async function emitEmployeeEvent(employeeId, eventName, payload) {
+  if (!ioServer || !employeeId) return;
+  const employee = await Student.findById(employeeId).select('_id email').lean();
+  const users = await User.find({
+    role: 'employee',
+    $or: [
+      { employeeProfile: employeeId },
+      ...(employee?.email ? [{ email: employee.email }] : []),
+    ],
+  }).select('_id').lean();
+
+  users.forEach((user) => ioServer.to(userRoom(user._id)).emit(eventName, payload));
+}
+
 async function deliverPush(notification) {
   initializePushProviders();
   const userIds = await getRecipientUserIds(notification);
@@ -250,7 +274,7 @@ async function saveNotificationToken(user, body = {}, userAgent = '') {
   return NotificationToken.findOneAndUpdate(
     query,
     update,
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
 }
 
@@ -265,4 +289,7 @@ module.exports = {
   serializeNotification,
   setNotificationSocket,
   userRoom,
+  emitEmployeeEvent,
+  emitRoleEvent,
+  emitUserEvent,
 };

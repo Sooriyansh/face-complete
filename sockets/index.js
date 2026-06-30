@@ -2,7 +2,7 @@ const User = require('../models/User');
 const { AUTH_COOKIE, parseCookies, verifyJwt } = require('../services/auth/auth.service');
 const { roleRoom, setNotificationSocket, userRoom } = require('../services/notifications');
 
-function initializeSockets(server) {
+function initializeSockets(server, app) {
   let Server;
   try {
     ({ Server } = require('socket.io'));
@@ -48,6 +48,12 @@ function initializeSockets(server) {
   });
 
   setNotificationSocket(io);
+
+  // Make io accessible to API routes via app.locals
+  if (app) {
+    app.locals.io = io;
+  }
+
   return io;
 }
 

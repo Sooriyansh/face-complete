@@ -2,17 +2,27 @@ const WorkSession = require('../models/WorkSession');
 const DailyWorkReport = require('../models/DailyWorkReport');
 const SystemEvent = require('../models/SystemEvent');
 const Student = require('../models/Student');
+const { serializeSessionEvent, serializeSystemEvent } = require('./activityHistory');
 const { calculateSessionMetrics } = require('./hrms');
-const { notifyAdmins } = require('./notifications');
+const { emitEmployeeEvent, emitRoleEvent, notifyAdmins } = require('./notifications');
 const { calculateScheduleState, getWorkSchedule } = require('./workSchedule');
 
-function recordHrmsEvent(fields) {
-  return SystemEvent.create({
+async function recordHrmsEvent(fields) {
+  const event = await SystemEvent.create({
     eventId: Date.now() + Math.floor(Math.random() * 1000),
     sourceLog: 'HRMS',
     externalId: `hrms-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ...fields,
-  }).catch(() => {});
+  }).catch(() => null);
+
+  if (event) {
+    const payload = serializeSystemEvent(event);
+    emitRoleEvent('admin', 'activity:event', payload);
+    if (fields.employee) {
+      await emitEmployeeEvent(fields.employee, 'system_event:new', payload).catch(() => {});
+    }
+  }
+  return event;
 }
 
 const TRACKING_START_HOUR = 8;
@@ -208,6 +218,10 @@ async function startSessionAfterAttendance({ employee, attendance, attendanceTim
       metadata: { duplicate: true },
     });
     await existing.save();
+    emitRoleEvent('admin', 'activity:event', serializeSessionEvent(existing, existing.events[existing.events.length - 1]));
+    emitRoleEvent('admin', 'work_session:updated', existing);
+    await emitEmployeeEvent(employee._id, 'activity:event', serializeSessionEvent(existing, existing.events[existing.events.length - 1])).catch(() => {});
+    await emitEmployeeEvent(employee._id, 'work_session:updated', existing).catch(() => {});
     return existing;
   }
 
@@ -238,7 +252,7 @@ async function startSessionAfterAttendance({ employee, attendance, attendanceTim
     });
   }
 
-  return WorkSession.create({
+  const session = await WorkSession.create({
     employee: employee._id,
     attendance: attendance?._id || null,
     dateKey,
@@ -255,6 +269,12 @@ async function startSessionAfterAttendance({ employee, attendance, attendanceTim
     productivityScore: 78,
     events,
   });
+  const latestEvent = session.events[session.events.length - 1];
+  emitRoleEvent('admin', 'activity:event', serializeSessionEvent({ ...session.toObject(), employee }, latestEvent));
+  emitRoleEvent('admin', 'work_session:updated', session);
+  await emitEmployeeEvent(employee._id, 'activity:event', serializeSessionEvent({ ...session.toObject(), employee }, latestEvent)).catch(() => {});
+  await emitEmployeeEvent(employee._id, 'work_session:updated', session).catch(() => {});
+  return session;
 }
 
 async function joinWorkSession({ employee, dailyPlan, joinedAt = new Date() }) {
@@ -303,6 +323,11 @@ async function joinWorkSession({ employee, dailyPlan, joinedAt = new Date() }) {
   });
 
   await session.save();
+  const joinPayload = serializeSessionEvent(session, session.events[session.events.length - 1]);
+  emitRoleEvent('admin', 'activity:event', joinPayload);
+  emitRoleEvent('admin', 'work_session:updated', session);
+  await emitEmployeeEvent(employee._id, 'activity:event', joinPayload).catch(() => {});
+  await emitEmployeeEvent(employee._id, 'work_session:updated', session).catch(() => {});
   await recordHrmsEvent({
     employee: employee._id,
     employeeId: employee.rollNumber || '',
@@ -409,6 +434,49 @@ async function recordTrackingEvent(rawEvent) {
   }
 
   await session.save();
+  const activityPayload = serializeSessionEvent(session, session.events[session.events.length - 1]);
+
+  // Create a SystemEvent in the background for key employee activities so they appear in the Activity History timeline
+  const systemEventsToSync = {
+    'Lock': { name: 'Lock', meaning: 'Screen lock', id: 4800, log: 'Security', prov: 'BrowserActivity' },
+    'Unlock': { name: 'Unlock', meaning: 'Screen unlock', id: 4801, log: 'Security', prov: 'BrowserActivity' },
+    'Sleep': { name: 'Sleep', meaning: 'Sleep mode', id: 42, log: 'System', prov: 'BrowserActivity' },
+    'Wake Up': { name: 'Wakeup', meaning: 'Sleep se wapas ON', id: 1, log: 'System', prov: 'BrowserActivity' },
+    'Windows Login': { name: 'Login', meaning: 'User login', id: 4624, log: 'Security', prov: 'BrowserActivity' },
+    'Windows Logout': { name: 'Logout', meaning: 'User logout', id: 4634, log: 'Security', prov: 'BrowserActivity' }
+  };
+
+  const sysConfig = systemEventsToSync[type];
+  if (sysConfig && resolvedEmployee) {
+    const millis = occurredAt.getTime();
+    SystemEvent.create({
+      event: sysConfig.name,
+      meaning: sysConfig.meaning,
+      occurredAt,
+      eventId: sysConfig.id,
+      sourceLog: sysConfig.log,
+      provider: sysConfig.prov,
+      computer: rawEvent.deviceInfo || formatDeviceInfo(rawEvent) || 'Browser workstation',
+      employee: resolvedEmployee._id,
+      employeeId: resolvedEmployee.rollNumber || '',
+      employeeName: resolvedEmployee.name || '',
+      user: resolvedEmployee.name || '',
+      externalId: `browser-${sysConfig.name.toLowerCase()}-${resolvedEmployee._id}-${millis}-${Math.floor(Math.random() * 1000)}`,
+      message: rawEvent.message || sysConfig.meaning,
+    }).then(async (doc) => {
+      const payload = serializeSystemEvent(doc);
+      emitRoleEvent('admin', 'activity:event', payload);
+      await emitEmployeeEvent(resolvedEmployee._id, 'system_event:new', payload).catch(() => {});
+    }).catch(err => console.error('Error auto-creating SystemEvent from work session activity:', err));
+  }
+
+  if (resolvedEmployee) {
+    emitRoleEvent('admin', 'activity:event', activityPayload);
+    emitRoleEvent('admin', 'work_session:updated', session);
+    await emitEmployeeEvent(resolvedEmployee._id, 'activity:event', activityPayload).catch(() => {});
+    await emitEmployeeEvent(resolvedEmployee._id, 'work_session:updated', session).catch(() => {});
+  }
+
   return session;
 }
 
@@ -434,6 +502,11 @@ async function setMonitoringPermission(sessionId, permission) {
     deviceInfo: 'Employee Dashboard',
   });
   await session.save();
+  const permissionPayload = serializeSessionEvent(session, session.events[session.events.length - 1]);
+  emitRoleEvent('admin', 'activity:event', permissionPayload);
+  emitRoleEvent('admin', 'work_session:updated', session);
+  await emitEmployeeEvent(session.employee, 'activity:event', permissionPayload).catch(() => {});
+  await emitEmployeeEvent(session.employee, 'work_session:updated', session).catch(() => {});
   return session;
 }
 
@@ -504,6 +577,11 @@ async function checkoutSession(sessionId, reportInput = {}) {
   });
 
   await session.save();
+  const checkoutPayload = serializeSessionEvent(session, session.events[session.events.length - 1]);
+  emitRoleEvent('admin', 'activity:event', checkoutPayload);
+  emitRoleEvent('admin', 'work_session:updated', session);
+  await emitEmployeeEvent(session.employee?._id || session.employee, 'activity:event', checkoutPayload).catch(() => {});
+  await emitEmployeeEvent(session.employee?._id || session.employee, 'work_session:updated', session).catch(() => {});
   await DailyWorkReport.findOneAndUpdate(
     { employee: session.employee._id || session.employee, reportDate: session.dateKey },
     {
@@ -521,7 +599,7 @@ async function checkoutSession(sessionId, reportInput = {}) {
       additionalNotes,
       checkoutTime: now,
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
 
   if (session.attendance) {

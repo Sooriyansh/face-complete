@@ -40,7 +40,7 @@ registerRoutes(app);
 app.use(errorHandler);
 
 const server = http.createServer(app);
-initializeSockets(server);
+initializeSockets(server, app);
 initializeNotificationJobs();
 
 server.listen(PORT, () => {

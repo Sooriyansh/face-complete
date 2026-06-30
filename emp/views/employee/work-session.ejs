@@ -11,22 +11,79 @@
 <body data-role="<%= currentUser ? currentUser.role : 'employee' %>">
   <% const safeEmployee = typeof employee !== 'undefined' && employee ? employee : null; %>
   <% const safeWorkSession = typeof workSession !== 'undefined' ? workSession : null; %>
+  <% const safeSchedule = typeof workSchedule !== 'undefined' && workSchedule ? workSchedule : {}; %>
+  <% function fmt12(t) { if (!t) return '--:--'; const [h, m] = t.split(':').map(Number); const ampm = h >= 12 ? 'PM' : 'AM'; const h12 = h % 12 || 12; return h12 + ':' + String(m).padStart(2,'0') + ' ' + ampm; } %>
   <div class="enterprise-layout employee-layout">
     <%- include('partials/sidebar', { activePage: 'work-session' }) %>
     <main class="workspace">
       <%- include('partials/topbar', { syncLabel: 'Work session' }) %>
       <section class="page-hero reveal"><div><span class="status-chip"><span class="live-dot"></span>Workday actions</span><h1>Daily Workday</h1><p>Start work, add your plan, and check out when your day is finished.</p></div></section>
+
+      <!-- ── Current Office Schedule card ── -->
+      <section class="panel reveal" id="office-schedule-panel">
+        <div class="panel-header split">
+          <div><p class="eyebrow">Admin Settings</p><h2>Current Office Schedule</h2><p class="helper-text">These timings are set by your admin and apply to your workday right now.</p></div>
+          <span class="panel-badge"><span class="live-dot"></span> Live</span>
+        </div>
+        <div class="metric-grid compact" id="schedule-cards-grid">
+          <div class="metric-card">
+            <span class="metric-icon success"><i class="fa-solid fa-clock"></i></span>
+            <p>Office Join Time</p>
+            <strong id="sched-join-time" data-schedule-field="officeJoinTime"><%= fmt12(safeSchedule.officeJoinTime) %></strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-icon warning"><i class="fa-solid fa-flag-checkered"></i></span>
+            <p>Check Out Time</p>
+            <strong id="sched-checkout-time" data-schedule-field="checkOutTime"><%= fmt12(safeSchedule.checkOutTime) %></strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-icon violet"><i class="fa-solid fa-business-time"></i></span>
+            <p>Working Hours</p>
+            <strong id="sched-working-hours" data-schedule-field="workingHours"><%= safeSchedule.workingHours || 8 %> hrs</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-icon"><i class="fa-solid fa-mug-hot"></i></span>
+            <p>Break Time</p>
+            <strong id="sched-break-minutes" data-schedule-field="breakMinutes"><%= safeSchedule.breakMinutes || 0 %> min</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-icon info"><i class="fa-solid fa-shield-halved"></i></span>
+            <p>Grace Period</p>
+            <strong id="sched-grace-period" data-schedule-field="gracePeriodMinutes"><%= safeSchedule.gracePeriodMinutes || 0 %> min</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-icon violet"><i class="fa-solid fa-moon"></i></span>
+            <p>Overtime Starts</p>
+            <strong id="sched-overtime-start" data-schedule-field="overtimeStartTime"><%= fmt12(safeSchedule.overtimeStartTime) %></strong>
+          </div>
+        </div>
+        <p class="helper-text" id="schedule-last-updated" style="margin-top:8px;font-size:0.8rem;opacity:0.6;">
+          <% if (safeSchedule.updatedAt) { %><i class="fa-solid fa-rotate"></i> Last updated: <%= new Date(safeSchedule.updatedAt).toLocaleString() %><% } %>
+        </p>
+      </section>
+
+      <!-- ── Work Session Console ── -->
       <section class="panel work-session-console reveal" id="daily-work-session" data-employee-id="<%= safeEmployee ? safeEmployee._id : '' %>">
         <div class="panel-header split"><div><p class="eyebrow">Workday actions</p><h2>Daily Workday</h2><p class="helper-text">Start work, add your plan, and check out when you finish.</p></div><span class="panel-badge" id="session-sync-badge"><span class="live-dot"></span> Ready</span></div>
         <div class="workday-action-grid">
-          <button type="button" class="workday-action join" id="join-work-button" <%= safeWorkSession && safeWorkSession.status !== 'checked_out' ? 'disabled' : '' %>><i class="fa-solid fa-play"></i><span>JOIN WORK</span><small>Start today's workday</small></button>
-          <button type="button" class="workday-action checkout" id="checkout-work-button" <%= !safeWorkSession || safeWorkSession.status === 'checked_out' ? 'disabled' : '' %> data-session-id="<%= safeWorkSession ? safeWorkSession._id : '' %>"><i class="fa-solid fa-flag-checkered"></i><span>CHECK OUT</span><small>Submit your end-of-day report</small></button>
+          <button type="button" class="workday-action join" id="join-work-button" <%= safeWorkSession && safeWorkSession.status !== 'checked_out' ? 'disabled' : '' %>>
+            <i class="fa-solid fa-play"></i>
+            <span>JOIN WORK</span>
+            <small>Join Time: <span id="join-time-hint" data-schedule-field="officeJoinTime"><%= fmt12(safeSchedule.officeJoinTime) %></span></small>
+          </button>
+          <button type="button" class="workday-action checkout" id="checkout-work-button" <%= !safeWorkSession || safeWorkSession.status === 'checked_out' ? 'disabled' : '' %> data-session-id="<%= safeWorkSession ? safeWorkSession._id : '' %>">
+            <i class="fa-solid fa-flag-checkered"></i>
+            <span>CHECK OUT</span>
+            <small>Checkout: <span id="checkout-time-hint" data-schedule-field="checkOutTime"><%= fmt12(safeSchedule.checkOutTime) %></span></small>
+          </button>
         </div>
         <div class="session-grid">
           <div class="session-status-card"><span class="session-state <%= safeWorkSession ? safeWorkSession.status : 'offline' %>" id="session-state-dot"></span><p>Current Work Status</p><strong id="session-status-text"><%= safeWorkSession ? safeWorkSession.status.replace('_', ' ').toUpperCase() : 'ATTENDANCE NEEDED' %></strong><small id="session-status-detail"><%= safeWorkSession ? 'Work tracking is active today.' : 'Mark attendance to start your workday.' %></small></div>
           <div class="session-status-card"><i class="fa-solid fa-stopwatch"></i><p>Work Timer</p><strong id="session-timer" data-started-at="<%= safeWorkSession && safeWorkSession.startedAt ? new Date(safeWorkSession.startedAt).toISOString() : '' %>" data-checkout-at="<%= safeWorkSession && safeWorkSession.checkoutAt ? new Date(safeWorkSession.checkoutAt).toISOString() : '' %>">00:00:00</strong><small>Total work time tracked today</small></div>
           <div class="session-status-card"><i class="fa-solid fa-wave-square"></i><p>Work Activity</p><strong id="session-event-count"><%= safeWorkSession && safeWorkSession.events ? safeWorkSession.events.length : 0 %></strong><small>Work activity saved today</small></div>
           <div class="session-status-card"><i class="fa-solid fa-gauge-high"></i><p>Work Progress</p><strong id="session-productivity"><%= safeWorkSession ? safeWorkSession.productivityScore : 0 %>%</strong><small>Based on active time, idle time, and checkout details</small></div>
+          <div class="session-status-card"><i class="fa-solid fa-keyboard"></i><p>Active Time</p><strong id="session-active-time"><%= safeWorkSession ? (Math.round((safeWorkSession.activeMs || 0) / 60000) + ' min') : '0 min' %></strong><small>Time spent actively working</small></div>
+          <div class="session-status-card"><i class="fa-solid fa-mug-hot"></i><p>Idle Time</p><strong id="session-idle-time"><%= safeWorkSession ? (Math.round((safeWorkSession.idleMs || 0) / 60000) + ' min') : '0 min' %></strong><small>Time spent inactive or away</small></div>
         </div>
         <div class="daily-plan-card"><span><i class="fa-solid fa-list-check"></i> Today's Work Plan</span><p id="daily-plan-preview"><%= safeWorkSession && safeWorkSession.dailyPlan ? safeWorkSession.dailyPlan : "No work plan submitted yet. Click JOIN WORK to add today's plan." %></p></div>
         <div class="session-monitor-layout">

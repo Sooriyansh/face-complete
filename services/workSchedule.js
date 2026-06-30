@@ -58,7 +58,7 @@ async function saveWorkSchedule(input, updatedBy = null) {
   return WorkSchedule.findOneAndUpdate(
     { key: 'default' },
     { ...schedule, updatedBy },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   ).lean();
 }
 

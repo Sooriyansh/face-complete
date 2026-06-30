@@ -31,7 +31,14 @@ async function getCurrentEmployee(req) {
   if (req.user?.role !== 'employee') {
     return null;
   }
-  return Student.findOne({ email: req.user.email });
+  const clauses = [];
+  if (req.user.email) clauses.push({ email: req.user.email });
+  if (req.user.employeeProfile) clauses.push({ _id: req.user.employeeProfile });
+  if (req.user.employeeId) clauses.push({ rollNumber: req.user.employeeId });
+  
+  if (clauses.length === 0) return null;
+  
+  return Student.findOne({ $or: clauses }).lean();
 }
 
 function normalizeReportRows(rows) {

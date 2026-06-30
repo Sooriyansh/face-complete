@@ -16,10 +16,10 @@
       <%- include('partials/topbar', { syncLabel: 'Activity logs' }) %>
       <section class="page-hero reveal"><div><span class="status-chip"><span class="live-dot"></span>My activity timeline</span><h1>My Activity History</h1><p>Review your sign-ins, sign-outs, screen locks, sleep mode, wakeups, and device activity.</p></div></section>
       <section class="metric-grid compact reveal">
-        <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-right-to-bracket"></i></span><p>Sign In History</p><strong><%= safeEvents.filter((event) => ['Login', 'Logout'].includes(event.event)).length || 0 %></strong></div>
-        <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-lock-open"></i></span><p>Screen Lock/Unlock</p><strong><%= safeEvents.filter((event) => ['Lock', 'Unlock'].includes(event.event)).length || 0 %></strong></div>
-        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-bed"></i></span><p>Sleep/Wake</p><strong><%= safeEvents.filter((event) => ['Sleep', 'Wakeup'].includes(event.event)).length || 0 %></strong></div>
-        <div class="metric-card"><span class="metric-icon success"><i class="fa-solid fa-clock-rotate-left"></i></span><p>Total Activities</p><strong><%= safeEvents.length %></strong></div>
+        <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-right-to-bracket"></i></span><p>Sign In History</p><strong id="metric-signin-count"><%= typeof signInCount !== 'undefined' ? signInCount : 0 %></strong></div>
+        <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-lock-open"></i></span><p>Screen Lock/Unlock</p><strong id="metric-lock-count"><%= typeof lockUnlockCount !== 'undefined' ? lockUnlockCount : 0 %></strong></div>
+        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-bed"></i></span><p>Sleep/Wake</p><strong id="metric-sleep-count"><%= typeof sleepWakeCount !== 'undefined' ? sleepWakeCount : 0 %></strong></div>
+        <div class="metric-card"><span class="metric-icon success"><i class="fa-solid fa-clock-rotate-left"></i></span><p>Total Activities</p><strong id="metric-total-activities"><%= typeof totalActivityCount !== 'undefined' ? totalActivityCount : (safeEvents ? safeEvents.length : 0) %></strong></div>
       </section>
       <section class="panel reveal" id="personal-events">
         <div class="panel-header"><div><p class="eyebrow">My Activity Timeline</p><h2>My Activity History</h2></div></div>

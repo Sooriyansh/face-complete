@@ -2,15 +2,28 @@ const Attendance = require('../../models/Attendance');
 const Student = require('../../models/Student');
 const SystemEvent = require('../../models/SystemEvent');
 const WorkSession = require('../../models/WorkSession');
+const { getWorkSchedule } = require('../../services/workSchedule');
 
 async function getEmployeePageData(req) {
-    const employeeQuery = req.user.role === 'employee' ? { email: req.user.email } : {};
+    let employeeQuery = {};
+    if (req.user && req.user.role === 'employee') {
+      const clauses = [];
+      if (req.user.email) clauses.push({ email: req.user.email });
+      if (req.user.employeeProfile) clauses.push({ _id: req.user.employeeProfile });
+      if (req.user.employeeId) clauses.push({ rollNumber: req.user.employeeId });
+      employeeQuery = clauses.length > 0 ? { $or: clauses } : { _id: null };
+    }
+
     const employee = await Student.findOne(employeeQuery).sort({ createdAt: -1 }).lean();
-    const attendanceQuery = employee ? { student: employee._id } : {};
+    
+    // Strict scoping: If employee profile not found, ensure queries return nothing.
+    const attendanceQuery = employee ? { student: employee._id } : { _id: null };
+    
     const compactOrQuery = (clauses) => clauses.filter((clause) => {
       const value = Object.values(clause)[0];
       return value !== '' && value != null;
     });
+    
     const eventQuery = employee
       ? {
           $or: compactOrQuery([
@@ -20,9 +33,9 @@ async function getEmployeePageData(req) {
             { user: employee.name || '' },
           ]),
         }
-      : {};
+      : { _id: null };
 
-    const [records, personalEvents, workSession] = await Promise.all([
+    const [records, personalEvents, workSession, workSchedule, signInCount, lockUnlockCount, sleepWakeCount, totalActivityCount] = await Promise.all([
       Attendance.find(attendanceQuery).sort({ markedAt: -1 }).limit(20).populate('student').lean(),
       SystemEvent.find(eventQuery).sort({ occurredAt: -1 }).limit(20).lean(),
       employee
@@ -31,9 +44,24 @@ async function getEmployeePageData(req) {
             .populate('attendance')
             .lean()
         : null,
+      getWorkSchedule(),
+      SystemEvent.countDocuments(employee ? { ...eventQuery, event: { $in: ['Login', 'Logout', 'Windows Login', 'Windows Logout'] } } : { _id: null }),
+      SystemEvent.countDocuments(employee ? { ...eventQuery, event: { $in: ['Lock', 'Unlock'] } } : { _id: null }),
+      SystemEvent.countDocuments(employee ? { ...eventQuery, event: { $in: ['Sleep', 'Wakeup', 'Wake Up'] } } : { _id: null }),
+      SystemEvent.countDocuments(eventQuery),
     ]);
 
-    return { employee, records, personalEvents, workSession };
+    return { 
+      employee, 
+      records, 
+      personalEvents, 
+      workSession, 
+      workSchedule,
+      signInCount,
+      lockUnlockCount,
+      sleepWakeCount,
+      totalActivityCount
+    };
 }
 
 function renderEmployeePage(view) {

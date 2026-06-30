@@ -28,7 +28,7 @@
 
       <section class="metric-grid compact reveal">
         <a class="metric-card" href="/employee/attendance"><span class="metric-icon success"><i class="fa-solid fa-calendar-check"></i></span><p>My Attendance</p><strong><%= safeRecords.length %></strong></a>
-        <a class="metric-card" href="/employee/activity"><span class="metric-icon"><i class="fa-solid fa-right-to-bracket"></i></span><p>Sign In History</p><strong><%= safeEvents.filter((event) => ['Login', 'Logout'].includes(event.event)).length || 0 %></strong></a>
+        <a class="metric-card" href="/employee/activity"><span class="metric-icon"><i class="fa-solid fa-right-to-bracket"></i></span><p>Sign In History</p><strong id="metric-signin-count"><%= typeof signInCount !== 'undefined' ? signInCount : 0 %></strong></a>
         <a class="metric-card" href="/employee/work-session"><span class="metric-icon violet"><i class="fa-solid fa-satellite-dish"></i></span><p>Workday</p><strong><%= safeWorkSession ? safeWorkSession.status.replace('_', ' ') : 'Pending' %></strong></a>
         <a class="metric-card" href="/employee/enrollment"><span class="metric-icon"><i class="fa-solid fa-id-card-clip"></i></span><p>Face Registration</p><strong><%= safeEmployee && safeEmployee.enrollmentStatus ? safeEmployee.enrollmentStatus : 'Pending' %></strong></a>
       </section>
