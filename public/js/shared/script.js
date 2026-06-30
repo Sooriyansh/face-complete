@@ -755,7 +755,11 @@ function updateSystemEventsSummary(data) {
   const count = document.getElementById('system-events-count');
   const range = document.getElementById('system-events-range');
   const sync = document.getElementById('system-events-sync');
-  const accuracy = document.getElementById('system-events-accuracy');
+  const lockCount = document.getElementById('system-events-lock-count');
+  const signInCount = document.getElementById('system-events-signin-count');
+  const signOutCount = document.getElementById('system-events-signout-count');
+  const sleepCount = document.getElementById('system-events-sleep-count');
+  const activeIdle = document.getElementById('system-events-active-idle');
 
   if (count) {
     count.textContent = String((data.events || []).length);
@@ -771,9 +775,43 @@ function updateSystemEventsSummary(data) {
     sync.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  if (accuracy) {
-    accuracy.textContent = '100%';
+  const totals = data.summary?.totals || data.totals || {};
+  if (lockCount) {
+    lockCount.textContent = String(totals.lockUnlock || 0);
   }
+  if (signInCount) {
+    signInCount.textContent = String(totals.signIn || 0);
+  }
+  if (signOutCount) {
+    signOutCount.textContent = String(totals.signOut || 0);
+  }
+  if (sleepCount) {
+    sleepCount.textContent = String(totals.sleepWake || 0);
+  }
+  if (activeIdle) {
+    activeIdle.textContent = `${formatShortDuration(totals.activeMs || 0)} / ${formatShortDuration(totals.idleMs || 0)}`;
+  }
+}
+
+function renderSystemEventsLiveFeed(events) {
+  const feed = document.getElementById('system-events-live-feed');
+  if (!feed) return;
+  const rows = (events || []).slice(0, 5);
+  if (!rows.length) {
+    feed.innerHTML = '<div><span class="live-dot"></span><strong>No activity recorded yet</strong><p>Waiting for Windows agent or attendance activity.</p></div>';
+    return;
+  }
+  feed.innerHTML = '';
+  rows.forEach((event) => {
+    const item = document.createElement('div');
+    const employeeName = event.employeeName || event.user || 'Unknown employee';
+    item.innerHTML = `
+      <span class="live-dot"></span>
+      <strong>${escapeHtml(employeeName)} - ${escapeHtml(event.event || 'Activity')}</strong>
+      <p>${escapeHtml(new Date(event.occurredAt).toLocaleString())} - ${escapeHtml(event.meaning || event.provider || event.sourceLog || '-')}</p>
+    `;
+    feed.appendChild(item);
+  });
 }
 
 async function refreshHomeData() {
@@ -1057,6 +1095,16 @@ function renderAdminMonitoring(data) {
   });
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
+
 async function refreshAdminMonitoring() {
   const tableBody = document.getElementById('admin-monitoring-body');
   if (!tableBody) {
@@ -1079,15 +1127,22 @@ async function refreshSystemEvents() {
     const to = document.getElementById('system-events-to')?.value || '';
     const employee = document.getElementById('user-filter')?.value || '';
     const department = document.getElementById('department-filter')?.value || '';
+    const eventType = document.querySelector('[data-event-filter].active')?.dataset.eventFilter || '';
     const params = new URLSearchParams({ sort: 'asc', limit: '500' });
     if (date) params.set('date', date);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (employee) params.set('employee', employee);
     if (department) params.set('department', department);
-    if (!date && !from && !to && !employee && !department) params.set('limit', '100');
-    const data = await fetchJson(`/api/system-events?${params.toString()}`);
+    if (eventType) params.set('event', eventType);
+    if (!date && !from && !to && !employee && !department && !eventType) params.set('limit', '100');
+    const [data, summary] = await Promise.all([
+      fetchJson(`/api/system-events?${params.toString()}`),
+      fetchJson(`/api/system-events/dashboard-summary?${params.toString()}`),
+    ]);
+    data.summary = summary;
     renderEnhancedSystemEvents(data.events || []);
+    renderSystemEventsLiveFeed(summary.latestEvents || data.events || []);
     updateSystemEventsSummary(data);
     attachUserFilterListener();
 
@@ -1781,9 +1836,19 @@ if (systemEventsResetButton) {
       const element = document.getElementById(id);
       if (element) element.value = '';
     });
+    document.querySelectorAll('[data-event-filter].active').forEach((button) => button.classList.remove('active'));
     refreshSystemEvents().catch((error) => showToast(error.message));
   });
 }
+
+document.querySelectorAll('[data-event-filter]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const isActive = button.classList.contains('active');
+    document.querySelectorAll('[data-event-filter].active').forEach((item) => item.classList.remove('active'));
+    if (!isActive) button.classList.add('active');
+    refreshSystemEvents().catch((error) => showToast(error.message));
+  });
+});
 
 const realtimeSystemEventsToggle = document.getElementById('realtime-system-events');
 if (realtimeSystemEventsToggle) {
@@ -1812,11 +1877,13 @@ if (exportSystemEventsButton) {
     const to = document.getElementById('system-events-to')?.value || '';
     const employee = document.getElementById('user-filter')?.value || '';
     const department = document.getElementById('department-filter')?.value || '';
+    const eventType = document.querySelector('[data-event-filter].active')?.dataset.eventFilter || '';
     if (date) params.set('date', date);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (employee) params.set('employee', employee);
     if (department) params.set('department', department);
+    if (eventType) params.set('event', eventType);
     window.location.href = `/api/system-events/export/csv${params.toString() ? `?${params.toString()}` : ''}`;
   });
 }
@@ -3333,20 +3400,30 @@ const NotificationCenter = (() => {
       showToast('Work schedule updated by Admin.', 'info');
     });
 
+    const incrementMetric = (id, amount = 1) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const current = Number.parseInt(el.textContent || '0', 10);
+      el.textContent = String((Number.isFinite(current) ? current : 0) + amount);
+    };
+
+    const loginEvents = ['Login', 'Logout', 'Windows Login', 'Windows Logout', 'Face Login', 'Password Login', 'Employee Login', 'User Session Start', 'User Session End', 'Session Connect', 'Session Disconnect'];
+    const lockEvents = ['Lock', 'Unlock', 'Screen Lock', 'Screen Unlock'];
+    const sleepEvents = ['Sleep', 'Wakeup', 'Wake Up'];
+
     socket.on('system_event:new', (event) => {
       const type = event.event || event.type || '';
-      if (['Login', 'Logout', 'Windows Login', 'Windows Logout'].includes(type)) {
-        const el = document.getElementById('metric-signin-count');
-        if (el) el.textContent = parseInt(el.textContent || '0', 10) + 1;
-      } else if (['Lock', 'Unlock'].includes(type)) {
-        const el = document.getElementById('metric-lock-count');
-        if (el) el.textContent = parseInt(el.textContent || '0', 10) + 1;
-      } else if (['Sleep', 'Wakeup', 'Wake Up'].includes(type)) {
-        const el = document.getElementById('metric-sleep-count');
-        if (el) el.textContent = parseInt(el.textContent || '0', 10) + 1;
+      if (loginEvents.includes(type)) {
+        incrementMetric('metric-signin-count');
+      } else if (lockEvents.includes(type)) {
+        incrementMetric('metric-lock-count');
+      } else if (sleepEvents.includes(type)) {
+        incrementMetric('metric-sleep-count');
       }
+      incrementMetric('metric-total-activities');
       const totalEl = document.getElementById('metric-total-activities');
-      if (totalEl) totalEl.textContent = parseInt(totalEl.textContent || '0', 10) + 1;
+      const statusEl = document.getElementById('metric-total-activities-status');
+      if (totalEl && statusEl) statusEl.textContent = totalEl.textContent;
     });
 
     socket.on('work_session:updated', (session) => {

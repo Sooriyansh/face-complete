@@ -2,10 +2,10 @@ const Student = require('../models/Student');
 const SystemEvent = require('../models/SystemEvent');
 const WorkSession = require('../models/WorkSession');
 
-const LOGIN_EVENTS = ['Login', 'Windows Login', 'Face Login', 'Password Login', 'Employee Login', 'User Session Start', 'Session Connect'];
-const LOGOUT_EVENTS = ['Logout', 'Windows Logout', 'Employee Logout', 'User Session End', 'Session Disconnect'];
+const LOGIN_EVENTS = ['Login', 'Windows Login', 'Windows Sign In', 'Face Login', 'Password Login', 'Employee Login', 'User Session Start', 'Session Connect'];
+const LOGOUT_EVENTS = ['Logout', 'Windows Logout', 'Windows Sign Out', 'Employee Logout', 'User Session End', 'Session Disconnect'];
 const LOCK_UNLOCK_EVENTS = ['Lock', 'Unlock', 'Screen Lock', 'Screen Unlock'];
-const SLEEP_WAKE_EVENTS = ['Sleep', 'Wakeup', 'Wake Up'];
+const SLEEP_WAKE_EVENTS = ['Sleep', 'Wakeup', 'Wake Up', 'System Wake'];
 const POWER_EVENTS = ['Startup', 'Laptop Startup', 'Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown', 'Restart'];
 const JOIN_CHECKOUT_EVENTS = ['Join Work', 'Check Out', 'Check-Out Completed', 'Daily Report Submitted', 'Employee Joined Work'];
 const BREAK_EVENTS = ['Break Start', 'Break End'];
@@ -194,7 +194,7 @@ async function getEmployeeActivitySummary(employee) {
   return {
     loginCount,
     logoutCount,
-    signInCount: loginCount,
+    signInCount: loginCount + logoutCount,
     lockUnlockCount: lockUnlockCount + sessionCount(LOCK_UNLOCK_EVENTS),
     sleepWakeCount: sleepWakeCount + sessionCount(SLEEP_WAKE_EVENTS),
     powerEventCount: powerEventCount + sessionCount(POWER_EVENTS),

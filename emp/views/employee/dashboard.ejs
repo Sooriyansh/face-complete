@@ -29,6 +29,9 @@
       <section class="metric-grid compact reveal">
         <a class="metric-card" href="/employee/attendance"><span class="metric-icon success"><i class="fa-solid fa-calendar-check"></i></span><p>My Attendance</p><strong><%= safeRecords.length %></strong></a>
         <a class="metric-card" href="/employee/activity"><span class="metric-icon"><i class="fa-solid fa-right-to-bracket"></i></span><p>Sign In History</p><strong id="metric-signin-count"><%= typeof signInCount !== 'undefined' ? signInCount : 0 %></strong></a>
+        <a class="metric-card" href="/employee/activity"><span class="metric-icon"><i class="fa-solid fa-lock-open"></i></span><p>Screen Lock/Unlock</p><strong id="metric-lock-count"><%= typeof lockUnlockCount !== 'undefined' ? lockUnlockCount : 0 %></strong></a>
+        <a class="metric-card" href="/employee/activity"><span class="metric-icon violet"><i class="fa-solid fa-bed"></i></span><p>Sleep/Wake</p><strong id="metric-sleep-count"><%= typeof sleepWakeCount !== 'undefined' ? sleepWakeCount : 0 %></strong></a>
+        <a class="metric-card" href="/employee/activity"><span class="metric-icon success"><i class="fa-solid fa-clock-rotate-left"></i></span><p>Total Activities</p><strong id="metric-total-activities"><%= typeof totalActivityCount !== 'undefined' ? totalActivityCount : safeEvents.length %></strong></a>
         <a class="metric-card" href="/employee/work-session"><span class="metric-icon violet"><i class="fa-solid fa-satellite-dish"></i></span><p>Workday</p><strong><%= safeWorkSession ? safeWorkSession.status.replace('_', ' ') : 'Pending' %></strong></a>
         <a class="metric-card" href="/employee/enrollment"><span class="metric-icon"><i class="fa-solid fa-id-card-clip"></i></span><p>Face Registration</p><strong><%= safeEmployee && safeEmployee.enrollmentStatus ? safeEmployee.enrollmentStatus : 'Pending' %></strong></a>
       </section>
@@ -50,7 +53,7 @@
           <div class="status-stack">
             <div><span class="live-dot"></span><strong>Attendance</strong><p><%= safeRecords.length ? 'Recent attendance available' : 'Waiting for face scan' %></p></div>
             <div><span class="live-dot"></span><strong>Workday</strong><p><%= safeWorkSession ? safeWorkSession.status.replace('_', ' ') : 'Not started' %></p></div>
-            <div><span class="live-dot"></span><strong>Activity History</strong><p><%= safeEvents.length %> activity record(s)</p></div>
+            <div><span class="live-dot"></span><strong>Activity History</strong><p><span id="metric-total-activities-status"><%= typeof totalActivityCount !== 'undefined' ? totalActivityCount : safeEvents.length %></span> activity record(s)</p></div>
             <div><span class="live-dot"></span><strong>Device</strong><p>Open device page for details</p></div>
           </div>
         </aside>

@@ -776,6 +776,11 @@ code {
   min-height: 150px;
   display: grid;
   align-content: space-between;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .event-type-card i {
@@ -784,6 +789,11 @@ code {
 }
 
 .event-type-card strong { font-size: 1.05rem; }
+
+.event-type-card.active {
+  border-color: rgba(0, 245, 212, 0.65);
+  box-shadow: var(--shadow), 0 0 0 2px rgba(0, 245, 212, 0.14);
+}
 
 .user-summary-container {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));

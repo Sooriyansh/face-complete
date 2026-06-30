@@ -2,6 +2,7 @@ const Attendance = require('../../models/Attendance');
 const Student = require('../../models/Student');
 const SystemEvent = require('../../models/SystemEvent');
 const WorkSession = require('../../models/WorkSession');
+const { getEmployeeActivitySummary } = require('../../services/activityHistory');
 const { getWorkSchedule } = require('../../services/workSchedule');
 
 async function getEmployeePageData(req) {
@@ -35,7 +36,7 @@ async function getEmployeePageData(req) {
         }
       : { _id: null };
 
-    const [records, personalEvents, workSession, workSchedule, signInCount, lockUnlockCount, sleepWakeCount, totalActivityCount] = await Promise.all([
+    const [records, personalEvents, workSession, workSchedule, activitySummary] = await Promise.all([
       Attendance.find(attendanceQuery).sort({ markedAt: -1 }).limit(20).populate('student').lean(),
       SystemEvent.find(eventQuery).sort({ occurredAt: -1 }).limit(20).lean(),
       employee
@@ -45,10 +46,7 @@ async function getEmployeePageData(req) {
             .lean()
         : null,
       getWorkSchedule(),
-      SystemEvent.countDocuments(employee ? { ...eventQuery, event: { $in: ['Login', 'Logout', 'Windows Login', 'Windows Logout'] } } : { _id: null }),
-      SystemEvent.countDocuments(employee ? { ...eventQuery, event: { $in: ['Lock', 'Unlock'] } } : { _id: null }),
-      SystemEvent.countDocuments(employee ? { ...eventQuery, event: { $in: ['Sleep', 'Wakeup', 'Wake Up'] } } : { _id: null }),
-      SystemEvent.countDocuments(eventQuery),
+      getEmployeeActivitySummary(employee),
     ]);
 
     return { 
@@ -57,10 +55,10 @@ async function getEmployeePageData(req) {
       personalEvents, 
       workSession, 
       workSchedule,
-      signInCount,
-      lockUnlockCount,
-      sleepWakeCount,
-      totalActivityCount
+      signInCount: activitySummary.signInCount,
+      lockUnlockCount: activitySummary.lockUnlockCount,
+      sleepWakeCount: activitySummary.sleepWakeCount,
+      totalActivityCount: activitySummary.totalActivityCount
     };
 }
 

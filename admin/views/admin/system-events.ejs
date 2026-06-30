@@ -11,6 +11,8 @@
 <body data-role="admin">
   <% const safeSystemEvents = typeof systemEvents !== 'undefined' ? systemEvents : []; %>
   <% const safeStudents = typeof students !== 'undefined' ? students : []; %>
+  <% const safeEmployeeStatuses = typeof employeeStatuses !== 'undefined' ? employeeStatuses : []; %>
+  <% const statusByEmployee = new Map(safeEmployeeStatuses.map((row) => [String(row.employeeId), row])); %>
   <% const safeRange = typeof systemEventRange !== 'undefined' ? systemEventRange : null; %>
   <div class="enterprise-layout">
     <aside class="side-nav">
@@ -21,7 +23,7 @@
         <a href="/admin/employees"><i class="fa-solid fa-users-gear"></i>Employees</a>
         <a class="active" href="/admin/system-events"><i class="fa-solid fa-timeline"></i>Activity History</a>
       </nav>
-      <div class="rbac-card"><span class="security-badge">Admin access</span><p>Filter any registered employee and inspect complete laptop, login, lock, attendance, and live activity history.</p></div>
+      <div class="rbac-card"><span class="security-badge">Admin access</span><p>Filter any registered employee and inspect complete device, login, lock, attendance, and live activity history.</p></div>
       <form action="/logout" method="POST" class="logout-form"><button type="submit">Logout</button></form>
     </aside>
 
@@ -40,7 +42,7 @@
         <div>
           <span class="status-chip"><span class="live-dot"></span> Live security timeline dashboard</span>
           <h1>Activity History</h1>
-          <p>Track employee device activity and work sessions in real-time.</p>
+          <p>Track employee Windows device activity and work sessions in real time.</p>
         </div>
         <div class="hero-actions">
           <button id="refresh-system-events" class="btn btn-primary"><i class="fa-solid fa-rotate-right"></i> Refresh Activity</button>
@@ -63,17 +65,24 @@
       <section class="metric-grid compact reveal">
         <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-clock"></i></span><p>Tracking Window</p><strong id="system-events-range"><% if (safeRange) { %><%= new Date(safeRange.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %> - <%= new Date(safeRange.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %><% } else { %>08:00 - Now<% } %></strong></div>
         <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-bolt"></i></span><p>Total Events</p><strong id="system-events-count"><%= safeSystemEvents.length %></strong></div>
-        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-shield-check"></i></span><p>Security Accuracy</p><strong id="system-events-accuracy">100%</strong></div>
+        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-lock"></i></span><p>Lock/Unlock</p><strong id="system-events-lock-count">0</strong></div>
         <div class="metric-card"><span class="metric-icon success"><i class="fa-solid fa-satellite-dish"></i></span><p>Live Sync Status</p><strong id="system-events-sync">Waiting</strong></div>
       </section>
 
-      <section class="event-type-grid reveal">
-        <div class="event-type-card"><i class="fa-solid fa-power-off"></i><strong>Startup</strong><span>Boot detection</span></div>
-        <div class="event-type-card"><i class="fa-solid fa-plug-circle-xmark"></i><strong>Shutdown</strong><span>Power-off log</span></div>
-        <div class="event-type-card"><i class="fa-solid fa-moon"></i><strong>Sleep/Wakeup</strong><span>Session continuity</span></div>
-        <div class="event-type-card"><i class="fa-solid fa-right-to-bracket"></i><strong>Sign In/Logout</strong><span>User access</span></div>
-        <div class="event-type-card"><i class="fa-solid fa-lock"></i><strong>Lock/Unlock</strong><span>Screen security</span></div>
-        <div class="event-type-card"><i class="fa-solid fa-camera"></i><strong>Attendance</strong><span>Face scan activity</span></div>
+      <section class="metric-grid compact reveal">
+        <div class="metric-card"><span class="metric-icon success"><i class="fa-solid fa-right-to-bracket"></i></span><p>Sign In</p><strong id="system-events-signin-count">0</strong></div>
+        <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-right-from-bracket"></i></span><p>Sign Out</p><strong id="system-events-signout-count">0</strong></div>
+        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-moon"></i></span><p>Sleep/Wake</p><strong id="system-events-sleep-count">0</strong></div>
+        <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-hourglass-half"></i></span><p>Active / Idle</p><strong id="system-events-active-idle">0m / 0m</strong></div>
+      </section>
+
+      <section class="event-type-grid reveal" id="system-event-type-filters">
+        <button type="button" class="event-type-card" data-event-filter="Startup"><i class="fa-solid fa-power-off"></i><strong>Startup</strong><span>Boot detection</span></button>
+        <button type="button" class="event-type-card" data-event-filter="Shutdown"><i class="fa-solid fa-plug-circle-xmark"></i><strong>Shutdown</strong><span>Power-off log</span></button>
+        <button type="button" class="event-type-card" data-event-filter="Sleep,Wakeup,System Wake"><i class="fa-solid fa-moon"></i><strong>Sleep/Wakeup</strong><span>Session continuity</span></button>
+        <button type="button" class="event-type-card" data-event-filter="Windows Sign In,Windows Sign Out,Login,Logout,User Session Start,User Session End,Session Connect,Session Disconnect"><i class="fa-solid fa-right-to-bracket"></i><strong>Sign In/Logout</strong><span>User access</span></button>
+        <button type="button" class="event-type-card" data-event-filter="Screen Lock,Screen Unlock,Lock,Unlock"><i class="fa-solid fa-lock"></i><strong>Lock/Unlock</strong><span>Screen security</span></button>
+        <button type="button" class="event-type-card" data-event-filter="Active Application,Application Switch,Website Visited,Application Started,Application Stopped"><i class="fa-solid fa-window-restore"></i><strong>Apps/Websites</strong><span>Foreground usage</span></button>
       </section>
 
       <section class="admin-grid reveal">
@@ -81,23 +90,29 @@
           <div class="panel-header"><div><p class="eyebrow">User filter section</p><h2>Registered Employees</h2></div></div>
           <div class="employee-filter-list">
             <% if (safeStudents.length === 0) { %><p class="helper-text">No registered employees yet.</p><% } %>
-            <% safeStudents.forEach((student, index) => { %>
-              <button class="employee-filter-card" type="button" data-user="<%= student._id %>" data-department="<%= student.department || '' %>" data-status="<%= index % 3 === 0 ? 'Offline' : 'Online' %>">
+            <% safeStudents.forEach((student) => { %>
+              <% const employeeStatus = statusByEmployee.get(String(student._id)) || { status: 'Offline', lastActivityAt: null, activeApplication: '' }; %>
+              <button class="employee-filter-card" type="button" data-user="<%= student._id %>" data-department="<%= student.department || '' %>" data-status="<%= employeeStatus.status %>">
                 <span class="avatar"><%= student.name.slice(0,2).toUpperCase() %></span>
-                <span><strong><%= student.name %></strong><small><%= student.department || 'General' %> · Last active <%= index + 2 %>m ago</small></span>
-                <span class="<%= index % 3 === 0 ? 'status-offline' : 'status-online' %>"><%= index % 3 === 0 ? 'Offline' : 'Online' %></span>
+                <span><strong><%= student.name %></strong><small><%= student.department || 'General' %> - Last active <%= employeeStatus.lastActivityAt ? new Date(employeeStatus.lastActivityAt).toLocaleString() : 'not recorded' %><% if (employeeStatus.activeApplication) { %> - <%= employeeStatus.activeApplication %><% } %></small></span>
+                <span class="<%= employeeStatus.status === 'Online' ? 'status-online' : 'status-offline' %>"><%= employeeStatus.status %></span>
               </button>
             <% }) %>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-header"><div><p class="eyebrow">Live live feed</p><h2>Activity Feed</h2></div></div>
-          <div class="activity-feed realtime-feed">
-            <div class="severity-success"><span class="live-dot"></span><strong>Rahul laptop started at 08:12 AM</strong><p>Startup · Laptop activity</p></div>
-            <div><span class="live-dot"></span><strong>Ankit entered sleep mode</strong><p>Sleep/Wakeup · Session continuity</p></div>
-            <div class="severity-success"><span class="live-dot"></span><strong>Priya marked attendance successfully</strong><p>Attendance · Face scan</p></div>
-            <div><span class="live-dot"></span><strong>Rohit unlocked screen</strong><p>Lock/Unlock · Screen security</p></div>
-            <div class="severity-danger"><span class="live-dot danger-dot"></span><strong>Aman logged out</strong><p>Logout · User access</p></div>
+          <div class="panel-header"><div><p class="eyebrow">Live feed</p><h2>Activity Feed</h2></div></div>
+          <div class="activity-feed realtime-feed" id="system-events-live-feed">
+            <% if (safeSystemEvents.length === 0) { %>
+              <div><span class="live-dot"></span><strong>No activity recorded yet</strong><p>Waiting for Windows agent or attendance activity.</p></div>
+            <% } %>
+            <% safeSystemEvents.slice(0, 5).forEach((event) => { %>
+              <div>
+                <span class="live-dot"></span>
+                <strong><%= event.employeeName || event.user || 'Unknown employee' %> - <%= event.event %></strong>
+                <p><%= new Date(event.occurredAt).toLocaleString() %> - <%= event.meaning || event.provider || event.sourceLog || '-' %></p>
+              </div>
+            <% }) %>
           </div>
         </div>
       </section>
@@ -107,17 +122,17 @@
           <div>
             <p class="eyebrow">Timeline</p>
             <h2>Complete Activity Timeline</h2>
-            <p id="system-events-status" class="helper-text">Select an employee to show only that employee's attendance history, system events, laptop activity, login/logout logs, and lock/unlock history.</p>
+            <p id="system-events-status" class="helper-text">Select an employee to show only that employee's attendance history, system events, device activity, login/logout logs, and lock/unlock history.</p>
           </div>
           <span class="panel-badge">Live events stream</span>
         </div>
         <div class="timeline-stream" id="system-events-body">
           <% if (safeSystemEvents.length === 0) { %><div><span class="event-dot"></span><strong>No activity recorded yet</strong><p>Waiting for device activity updates.</p></div><% } %>
           <% safeSystemEvents.forEach((event) => { %>
-            <div class="event-row" data-user="<%= event.user || 'Unknown' %>">
+            <div class="event-row" data-user="<%= event.user || event.employeeName || 'Unknown' %>">
               <span class="event-dot"></span>
-              <strong><%= event.user || 'Unknown' %> · <%= event.event %></strong>
-              <p><%= new Date(event.occurredAt).toLocaleString() %> · <%= event.meaning || event.provider || event.sourceLog || '-' %> · Activity ID <%= event.eventId %></p>
+              <strong><%= event.user || event.employeeName || 'Unknown' %> - <%= event.event %></strong>
+              <p><%= new Date(event.occurredAt).toLocaleString() %> - <%= event.meaning || event.provider || event.sourceLog || '-' %> - Activity ID <%= event.eventId %></p>
             </div>
           <% }) %>
         </div>
@@ -128,4 +143,3 @@
   <script src="/js/shared/script.js"></script>
 </body>
 </html>
-

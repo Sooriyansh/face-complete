@@ -447,7 +447,8 @@ async function recordTrackingEvent(rawEvent) {
   };
 
   const sysConfig = systemEventsToSync[type];
-  if (sysConfig && resolvedEmployee) {
+  const shouldMirrorToSystemEvents = !rawEvent.externalId || rawEvent.metadata?.source === 'employee-work-session';
+  if (sysConfig && resolvedEmployee && shouldMirrorToSystemEvents) {
     const millis = occurredAt.getTime();
     SystemEvent.create({
       event: sysConfig.name,

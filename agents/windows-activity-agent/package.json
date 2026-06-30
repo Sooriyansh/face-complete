@@ -1,0 +1,17 @@
+{
+  "name": "faceai-windows-activity-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows employee activity tracking agent for FaceAI Attendance",
+  "main": "src/agent.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/agent.js",
+    "once": "node src/agent.js --once",
+    "install:start-task": "powershell.exe -ExecutionPolicy Bypass -File scripts/install-startup-task.ps1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {}
+}

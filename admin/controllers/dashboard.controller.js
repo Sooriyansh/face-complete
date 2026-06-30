@@ -334,10 +334,34 @@ async function systemEventsPage(req, res, next) {
       Student.find().sort({ name: 1 }).lean(),
       WorkSession.find({ dateKey: now.toISOString().slice(0, 10) }).populate('employee').populate('attendance').lean(),
     ]);
+    const sessionByEmployee = new Map(liveSessions.map((session) => [String(session.employee?._id || session.employee), session]));
+    const latestByEmployee = new Map();
+    systemEvents.forEach((event) => {
+      const key = String(event.employee || event.employeeId || event.employeeName || event.user || '');
+      if (key && !latestByEmployee.has(key)) latestByEmployee.set(key, event);
+    });
+    const employeeStatuses = students.map((student) => {
+      const session = sessionByEmployee.get(String(student._id));
+      const latest = latestByEmployee.get(String(student._id))
+        || latestByEmployee.get(student.rollNumber || '')
+        || latestByEmployee.get(student.name || '');
+      let status = session?.status === 'checked_out' ? 'Offline' : session ? 'Online' : 'Offline';
+      const latestEvent = latest?.event || '';
+      if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(latestEvent)) status = 'Idle';
+      if (['Lock', 'Screen Lock'].includes(latestEvent)) status = 'Locked';
+      if (['Shutdown', 'Unexpected Shutdown', 'Agent Offline', 'Network Offline'].includes(latestEvent)) status = 'Offline';
+      return {
+        employeeId: String(student._id),
+        status,
+        lastActivityAt: latest?.occurredAt || session?.lastActivityAt || session?.updatedAt || null,
+        activeApplication: latest?.metadata?.processName || latest?.metadata?.application || latest?.metadata?.windowTitle || '',
+      };
+    });
 
     res.render('admin/system-events', {
       systemEvents,
       students,
+      employeeStatuses,
       systemEventRange: {
         start: workdayStart,
         end: rangeEnd,

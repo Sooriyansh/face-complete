@@ -13,6 +13,7 @@
     "py:train": "node scripts/run-python-script.js train_model.py",
     "py:recognize": "node scripts/run-python-script.js recognize_attendance.py",
     "py:system-events": "node scripts/run-python-script.js system_event_monitor.py",
+    "agent:windows": "npm --prefix agents/windows-activity-agent start",
     "microservices:up": "docker compose -f infra/docker-compose.microservices.yml up --build",
     "service:gateway": "npm --prefix services/api-gateway start",
     "service:auth": "npm --prefix services/auth-service start",

@@ -3,7 +3,9 @@ const express = require('express');
 const SystemEvent = require('../../models/SystemEvent');
 const Student = require('../../models/Student');
 const WorkSession = require('../../models/WorkSession');
+const { serializeSystemEvent } = require('../../services/activityHistory');
 const { rowsToCsv } = require('../../services/hrms');
+const { emitEmployeeEvent, emitRoleEvent } = require('../../services/notifications');
 const { recordTrackingEvent } = require('../../services/workSessions');
 
 const router = express.Router();
@@ -39,18 +41,27 @@ const ALLOWED_EVENTS = new Set([
   'Restart',
   'Sleep',
   'Wakeup',
+  'System Wake',
   'Lock',
   'Unlock',
+  'Screen Lock',
+  'Screen Unlock',
   'Login',
   'Logout',
+  'Windows Sign In',
+  'Windows Sign Out',
   'Idle Time',
   'Idle State',
   'Active Usage',
   'Active State',
   'App Opened',
   'App Closed',
+  'Application Started',
+  'Application Stopped',
+  'Application Switch',
   'Website Visited',
   'Active Window',
+  'Active Application',
   'Keyboard Activity',
   'Mouse Activity',
   'Inactive Duration',
@@ -60,6 +71,12 @@ const ALLOWED_EVENTS = new Set([
   'User Session End',
   'Session Connect',
   'Session Disconnect',
+  'Network Online',
+  'Network Offline',
+  'System Boot Time',
+  'System Uptime',
+  'Agent Online',
+  'Agent Offline',
 ]);
 
 const WORKDAY_START_HOUR = 8;
@@ -95,7 +112,7 @@ function normalizeSystemEvent(rawEvent) {
 
   const event = String(rawEvent.event || '').trim();
   const occurredAt = new Date(rawEvent.occurredAt);
-  const eventId = Number(rawEvent.eventId);
+  const eventId = Number(rawEvent.eventId ?? 0);
   const sourceLog = String(rawEvent.sourceLog || '').trim();
   const externalId = String(rawEvent.externalId || '').trim();
 
@@ -111,24 +128,24 @@ function normalizeSystemEvent(rawEvent) {
 
   return {
     event,
-    meaning: String(rawEvent.meaning || '').trim(),
+    meaning: String(rawEvent.meaning || '').trim().slice(0, 500),
     occurredAt,
     eventId,
     sourceLog,
-    provider: String(rawEvent.provider || '').trim(),
+    provider: String(rawEvent.provider || '').trim().slice(0, 200),
     recordNumber: Number.isFinite(Number(rawEvent.recordNumber)) ? Number(rawEvent.recordNumber) : null,
-    computer: String(rawEvent.computer || '').trim(),
+    computer: String(rawEvent.computer || '').trim().slice(0, 200),
     employee: String(rawEvent.employee || rawEvent.employeeObjectId || '').match(/^[a-f\d]{24}$/i)
       ? String(rawEvent.employee || rawEvent.employeeObjectId)
       : null,
-    employeeId: String(rawEvent.employeeId || rawEvent.employeeCode || '').trim(),
-    employeeName: String(rawEvent.employeeName || '').trim(),
-    user: String(rawEvent.user || '').trim(),
+    employeeId: String(rawEvent.employeeId || rawEvent.employeeCode || '').trim().slice(0, 120),
+    employeeName: String(rawEvent.employeeName || '').trim().slice(0, 200),
+    user: String(rawEvent.user || '').trim().slice(0, 200),
     durationMs: Math.max(Number(rawEvent.durationMs || rawEvent.duration || 0), 0),
-    status: String(rawEvent.status || 'Recorded').trim(),
+    status: String(rawEvent.status || 'Recorded').trim().slice(0, 80),
     metadata: rawEvent.metadata && typeof rawEvent.metadata === 'object' ? rawEvent.metadata : {},
     message: String(rawEvent.message || '').trim().slice(0, 2000),
-    externalId,
+    externalId: externalId.slice(0, 500),
   };
 }
 
@@ -150,6 +167,13 @@ function compactOrQuery(clauses) {
     const value = Object.values(clause)[0];
     return value !== '' && value != null;
   });
+}
+
+function parseEventFilter(value) {
+  return String(value || '')
+    .split(',')
+    .map((event) => event.trim())
+    .filter((event) => ALLOWED_EVENTS.has(event));
 }
 
 async function resolveEmployeeForEvent(event) {
@@ -211,6 +235,19 @@ async function enrichEventsWithEmployees(events) {
   }));
 }
 
+function getUpsertedOperationIndexes(result) {
+  const indexes = new Set();
+  const upsertedIds = result?.upsertedIds || {};
+  Object.keys(upsertedIds).forEach((index) => indexes.add(Number(index)));
+
+  const rawUpserted = result?.result?.upserted || result?.getRawResponse?.().upserted || [];
+  rawUpserted.forEach((item) => {
+    if (Number.isFinite(Number(item.index))) indexes.add(Number(item.index));
+  });
+
+  return [...indexes].filter((index) => Number.isInteger(index));
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
@@ -219,6 +256,7 @@ router.get('/', async (req, res, next) => {
     const selectedEmployee = String(req.query.employee || '').trim();
     const selectedDepartment = String(req.query.department || '').trim();
     const selectedDate = String(req.query.date || '').trim();
+    const selectedEvents = parseEventFilter(req.query.event);
     const workdayRange = getWorkdayRange();
     const dateRange = dateOnlyRange(selectedDate);
     const from = dateRange?.start || parseDateQuery(req.query.from) || (mode === 'workday' ? workdayRange.start : null);
@@ -250,6 +288,9 @@ router.get('/', async (req, res, next) => {
       query.$or = employee
         ? compactOrQuery([{ employee: employee._id }, { employeeId: employee.rollNumber || '' }, { employeeName: employee.name || '' }, { user: employee.name || '' }])
         : compactOrQuery([{ user: selected }, { employeeName: selected }, { employeeId: selected }]);
+    }
+    if (selectedEvents.length) {
+      query.event = { $in: selectedEvents };
     }
 
     if (req.user?.role === 'employee') {
@@ -344,8 +385,116 @@ router.get('/export/:type', async (req, res, next) => {
         ? compactOrQuery([{ employee: employee._id }, { employeeId: employee.rollNumber || '' }, { employeeName: employee.name || '' }, { user: employee.name || '' }])
         : compactOrQuery([{ user: selectedUser }, { employeeName: selectedUser }, { employeeId: selectedUser }]);
     }
+    const selectedEvents = parseEventFilter(req.query.event);
+    if (selectedEvents.length) {
+      query.event = { $in: selectedEvents };
+    }
     const events = await SystemEvent.find(query).sort({ occurredAt: -1 }).limit(limit).lean();
     return sendSystemEventsExport(res, req.params.type, events);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/dashboard-summary', async (req, res, next) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only admin can view activity summaries.' });
+    }
+
+    const selectedDate = String(req.query.date || '').trim();
+    const selectedEmployee = String(req.query.employee || '').trim();
+    const selectedDepartment = String(req.query.department || '').trim();
+    const period = String(req.query.period || 'daily').toLowerCase();
+    const selectedEvents = parseEventFilter(req.query.event);
+    const now = new Date();
+    const dateRange = dateOnlyRange(selectedDate);
+    const from = dateRange?.start || parseDateQuery(req.query.from) || new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const to = dateRange?.end || parseDateQuery(req.query.to) || now;
+
+    const query = { occurredAt: { $gte: from, $lte: to } };
+    if (selectedDepartment) {
+      const employees = await Student.find({ department: selectedDepartment }).select('_id rollNumber name').lean();
+      query.$or = employees.flatMap((employee) => compactOrQuery([
+        { employee: employee._id },
+        { employeeId: employee.rollNumber || '' },
+        { employeeName: employee.name || '' },
+        { user: employee.name || '' },
+      ]));
+      if (!query.$or.length) query.$or = [{ user: /.^/ }];
+    } else if (selectedEmployee) {
+      const employee = selectedEmployee.match(/^[a-f\d]{24}$/i) ? await Student.findById(selectedEmployee).lean() : null;
+      query.$or = employee
+        ? compactOrQuery([{ employee: employee._id }, { employeeId: employee.rollNumber || '' }, { employeeName: employee.name || '' }, { user: employee.name || '' }])
+        : compactOrQuery([{ user: selectedEmployee }, { employeeName: selectedEmployee }, { employeeId: selectedEmployee }]);
+    }
+    if (selectedEvents.length) {
+      query.event = { $in: selectedEvents };
+    }
+
+    const [events, latestByEmployee, liveSessions] = await Promise.all([
+      SystemEvent.find(query).sort({ occurredAt: -1 }).limit(1000).lean(),
+      SystemEvent.aggregate([
+        { $match: query },
+        { $sort: { occurredAt: -1 } },
+        {
+          $group: {
+            _id: { $ifNull: ['$employee', { $ifNull: ['$employeeId', '$user'] }] },
+            latest: { $first: '$$ROOT' },
+          },
+        },
+        { $limit: 500 },
+      ]),
+      WorkSession.find({ dateKey: { $gte: from.toISOString().slice(0, 10), $lte: to.toISOString().slice(0, 10) } }).populate('employee').lean(),
+    ]);
+
+    const eventCounts = events.reduce((counts, event) => {
+      counts[event.event] = (counts[event.event] || 0) + 1;
+      return counts;
+    }, {});
+    const durationFor = (names) => events
+      .filter((event) => names.includes(event.event))
+      .reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
+    const sessionDurationMs = liveSessions.reduce((sum, session) => {
+      const start = session.startedAt || session.attendanceTime;
+      const end = session.checkoutAt || now;
+      return start ? sum + Math.max(new Date(end).getTime() - new Date(start).getTime(), 0) : sum;
+    }, 0);
+    const currentStatus = latestByEmployee.map((row) => {
+      const latest = row.latest || {};
+      const statusEvent = latest.event;
+      let status = 'Online';
+      if (['Shutdown', 'Unexpected Shutdown', 'Agent Offline', 'Network Offline'].includes(statusEvent)) status = 'Offline';
+      if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(statusEvent)) status = 'Idle';
+      if (['Lock', 'Screen Lock'].includes(statusEvent)) status = 'Locked';
+      return {
+        employee: latest.employee,
+        employeeId: latest.employeeId,
+        employeeName: latest.employeeName || latest.user || 'Unknown',
+        status,
+        activeApplication: latest.metadata?.processName || latest.metadata?.application || latest.metadata?.windowTitle || '',
+        lastActivityAt: latest.occurredAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      period,
+      range: { start: from, end: to },
+      totals: {
+        signIn: (eventCounts.Login || 0) + (eventCounts['Windows Sign In'] || 0) + (eventCounts['User Session Start'] || 0),
+        signOut: (eventCounts.Logout || 0) + (eventCounts['Windows Sign Out'] || 0) + (eventCounts['User Session End'] || 0),
+        lockUnlock: (eventCounts.Lock || 0) + (eventCounts.Unlock || 0) + (eventCounts['Screen Lock'] || 0) + (eventCounts['Screen Unlock'] || 0),
+        sleepWake: (eventCounts.Sleep || 0) + (eventCounts.Wakeup || 0) + (eventCounts['System Wake'] || 0),
+        shutdownRestart: (eventCounts.Shutdown || 0) + (eventCounts['Unexpected Shutdown'] || 0) + (eventCounts.Restart || 0),
+        activeMs: durationFor(['Active Usage', 'Active State', 'Active Application']),
+        idleMs: durationFor(['Idle Time', 'Idle State', 'Inactive Duration']),
+        sessionDurationMs,
+      },
+      eventCounts,
+      currentStatus,
+      latestEvents: events.slice(0, 100).map(serializeSystemEvent),
+    });
   } catch (error) {
     next(error);
   }
@@ -436,6 +585,18 @@ router.post('/ingest', async (req, res, next) => {
     );
 
     await Promise.all(events.map((event) => recordTrackingEvent(event)));
+    await Promise.allSettled(getUpsertedOperationIndexes(result).map(async (index) => {
+      const event = events[index];
+      if (!event) return;
+      const payload = serializeSystemEvent({
+        ...event,
+        _id: result.upsertedIds?.[index] || result.getRawResponse?.().upserted?.find((item) => item.index === index)?._id,
+      });
+      emitRoleEvent('admin', 'activity:event', payload);
+      if (event.employee) {
+        await emitEmployeeEvent(event.employee, 'system_event:new', payload);
+      }
+    }));
 
     res.status(201).json({
       success: true,
