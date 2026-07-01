@@ -1166,6 +1166,40 @@ let attendanceLocationAt = 0;
 let locationRetryAfter = 0;
 const SCAN_CANVAS_WIDTH = 520;
 
+// Scan countdown timer
+let scanCountdownInterval = null;
+let scanCountdownValue = 0;
+
+function startScanCountdown() {
+  const timerEl = document.getElementById('scan-countdown-timer');
+  if (!timerEl) return;
+  scanCountdownValue = 1400; // ms matching scanInterval
+  timerEl.hidden = false;
+  if (scanCountdownInterval) window.clearInterval(scanCountdownInterval);
+  scanCountdownInterval = window.setInterval(() => {
+    scanCountdownValue = Math.max(0, scanCountdownValue - 100);
+    const pct = Math.round(((1400 - scanCountdownValue) / 1400) * 100);
+    const bar = timerEl.querySelector('.scan-timer-bar-fill');
+    const label = timerEl.querySelector('.scan-timer-label');
+    if (bar) bar.style.width = pct + '%';
+    if (label) label.textContent = scanCountdownValue > 0
+      ? `Aagla scan ${(scanCountdownValue / 1000).toFixed(1)}s mein hoga`
+      : 'Scanning...';
+    if (scanCountdownValue === 0) {
+      scanCountdownValue = 1400;
+    }
+  }, 100);
+}
+
+function stopScanCountdown() {
+  if (scanCountdownInterval) {
+    window.clearInterval(scanCountdownInterval);
+    scanCountdownInterval = null;
+  }
+  const timerEl = document.getElementById('scan-countdown-timer');
+  if (timerEl) timerEl.hidden = true;
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -1327,6 +1361,51 @@ function setScanLoading(isLoading) {
   }
 }
 
+const faceScanProgressTimers = new Map();
+
+function setFaceScanProgress(prefix, value, label, state = 'scanning') {
+  const progress = document.getElementById(`${prefix}-scan-progress`);
+  const fill = document.getElementById(`${prefix}-scan-progress-fill`);
+  const valueElement = document.getElementById(`${prefix}-scan-progress-value`);
+  const labelElement = document.getElementById(`${prefix}-scan-progress-label`);
+  const safeValue = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  if (progress) progress.dataset.state = state;
+  if (fill) fill.style.width = `${safeValue}%`;
+  if (valueElement) valueElement.textContent = `${safeValue}%`;
+  if (labelElement) labelElement.textContent = label;
+}
+
+function startFaceScanProgress(prefix, label = 'Detecting face') {
+  window.clearInterval(faceScanProgressTimers.get(prefix));
+  let value = 4;
+  setFaceScanProgress(prefix, value, label);
+  const timer = window.setInterval(() => {
+    value = Math.min(88, value + (value < 45 ? 7 : value < 72 ? 4 : 2));
+    setFaceScanProgress(prefix, value, value < 38 ? 'Detecting face' : value < 68 ? 'Checking image quality' : 'Matching identity');
+  }, 260);
+  faceScanProgressTimers.set(prefix, timer);
+}
+
+function finishFaceScanProgress(prefix, success, label) {
+  window.clearInterval(faceScanProgressTimers.get(prefix));
+  faceScanProgressTimers.delete(prefix);
+  setFaceScanProgress(prefix, success ? 100 : 0, label, success ? 'success' : 'error');
+}
+
+// Show/hide problem hints below the face scan box
+function updateScanProblems(problems = []) {
+  const hintsEl = document.getElementById('scan-problem-hints');
+  const listEl = document.getElementById('scan-problem-list');
+  if (!hintsEl || !listEl) return;
+  if (!problems || problems.length === 0) {
+    hintsEl.style.display = 'none';
+    listEl.innerHTML = '';
+    return;
+  }
+  hintsEl.style.display = 'block';
+  listEl.innerHTML = problems.map(p => `<li>${p}</li>`).join('');
+}
+
 async function scanCurrentFrame() {
   if (scanInFlight) {
     return;
@@ -1340,6 +1419,7 @@ async function scanCurrentFrame() {
   }
 
   scanInFlight = true;
+  startFaceScanProgress('attendance');
   setScanLoading(true);
   setScanStatus('Detecting face...');
   setScannerState('attendance-scanner-state', 'Analyzing Face', 'scanning');
@@ -1351,8 +1431,14 @@ async function scanCurrentFrame() {
     updateText('attendance-quality-state', frameMetrics.qualityLabel);
 
     if (!frameMetrics.canSend) {
+      finishFaceScanProgress('attendance', false, 'Improve lighting or clarity');
       setScannerState('attendance-scanner-state', 'Improve Frame', 'warning');
       setRecognitionResult(`${frameMetrics.brightnessLabel} ${frameMetrics.qualityLabel}`, false);
+      const frameProblems = [];
+      if (frameMetrics.brightness < 45) frameProblems.push('Roshni bahut kam hai — roshan jagah mein baithe ya light on karein.');
+      else if (frameMetrics.brightness > 220) frameProblems.push('Roshni bahut tej hai — direct light ya glare se door ho jayen.');
+      if (frameMetrics.contrast < 26) frameProblems.push('Camera blur hai — seedha baithein aur hilna band karein.');
+      updateScanProblems(frameProblems);
       return;
     }
 
@@ -1370,6 +1456,7 @@ async function scanCurrentFrame() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      loaderSilent: true,
     });
 
     if (response.recognized) {
@@ -1378,7 +1465,8 @@ async function scanCurrentFrame() {
       const isDuplicate = response.duplicate;
       updateAttendanceScannerTelemetry(response, canvas, frameMetrics);
       setScannerState('attendance-scanner-state', 'Verified Successfully', 'success');
-      
+      finishFaceScanProgress('attendance', true, 'Face matched successfully');
+      updateScanProblems([]); // clear any old problems on success
       setRecognitionResult('', true, studentName, confidence);
       
       if (!isDuplicate) {
@@ -1395,13 +1483,42 @@ async function scanCurrentFrame() {
       
       await refreshHomeData();
       await loadDailyWorkSession();
+      stopLiveCamera();
+      const joinModal = document.getElementById('join-work-modal');
+      if (joinModal) {
+        joinModal.hidden = false;
+        window.setTimeout(() => document.getElementById('daily-plan-input')?.focus(), 80);
+      }
     } else {
+      finishFaceScanProgress('attendance', false, 'Face not matched - scan again');
       const confidence = Number(response.confidence || 0).toFixed(3);
       const message = friendlyFaceMessage(response.message || 'Face was not recognized.', response.stage).text;
       const qualityIssues = response.quality_issues || [];
       updateAttendanceScannerTelemetry(response, canvas, frameMetrics);
       setScannerState('attendance-scanner-state', response.stage === 'no_face' ? 'Center Face' : 'Face Not Recognized', 'error');
       
+      // Build problem list with clear Urdu/Hindi-friendly reasons
+      const problemReasons = [];
+      if (response.stage === 'no_face') {
+        problemReasons.push('Koi chehra frame mein nahi mila — apna chehra center mein rakhein.');
+      } else if (response.stage === 'multiple_faces') {
+        problemReasons.push('Ek se zyada log camera mein hain — akele rahein.');
+      } else if (response.stage === 'recognition' || response.stage === 'low_confidence') {
+        problemReasons.push(`Chehra pehchana nahi gaya (match ${(Number(response.confidence || 0) * 100).toFixed(1)}%) — seedha camera ki taraf dekhein.`);
+      }
+      if (!frameMetrics.canSend) {
+        if (frameMetrics.brightness < 45) problemReasons.push('Roshni bahut kam hai — roshan jagah mein baithe.');
+        else if (frameMetrics.brightness > 220) problemReasons.push('Roshni bahut zyada hai — glare kam karein.');
+        if (frameMetrics.contrast < 26) problemReasons.push('Tasveer blur hai — camera ke saamne seedha raho aur hilna band karo.');
+      }
+      if (qualityIssues && qualityIssues.length > 0) {
+        qualityIssues.forEach(q => problemReasons.push(q));
+      }
+      if (problemReasons.length === 0) {
+        problemReasons.push(message);
+      }
+      updateScanProblems(problemReasons);
+
       let displayMsg = message;
       if (qualityIssues && qualityIssues.length > 0) {
         displayMsg += ` | ${qualityIssues.join(' | ')}`;
@@ -1410,8 +1527,10 @@ async function scanCurrentFrame() {
       setRecognitionResult(displayMsg, false);
     }
   } catch (error) {
+      finishFaceScanProgress('attendance', false, 'Scan failed - try again');
       setRecognitionResult(error.message, false);
       setScannerState('attendance-scanner-state', 'Scan Failed', 'error');
+      updateScanProblems(['Server se response nahi mila — internet connection check karein aur dobara koshish karein.']);
     } finally {
       setScanLoading(false);
       setScanStatus(cameraStream ? 'Camera live - real-time scan is active.' : 'Camera stopped');
@@ -1502,6 +1621,7 @@ async function startLiveCamera() {
 
     scanInterval = window.setInterval(scanCurrentFrame, 1400);
     window.setTimeout(scanCurrentFrame, 450);
+    startScanCountdown();
   } catch (error) {
     cameraStream = null;
     setScanStatus('Camera access blocked.');
@@ -1528,6 +1648,7 @@ function stopLiveCamera() {
   }
 
   setScanStatus('Camera stopped.');
+  stopScanCountdown();
 }
 
 function setEnrollmentCameraStatus(message) {
@@ -1768,6 +1889,10 @@ if (studentForm) {
       }
       enrollmentImages = [];
       renderEnrollmentPreview();
+      const enrollmentProfilePhoto = document.getElementById('enrollment-profile-photo');
+      if (enrollmentProfilePhoto && data.student?.profileImage?.url) {
+        enrollmentProfilePhoto.src = data.student.profileImage.url;
+      }
       setEnrollmentSampleStatus('Required samples: 6 minimum. Recommended: 12.');
       await refreshHomeData();
     } catch (error) {
@@ -1786,6 +1911,81 @@ if (studentForm) {
     const formStatus = document.getElementById('student-form-status');
     if (formStatus) {
       formStatus.textContent = error.message;
+    }
+  });
+}
+
+const employeeProfileForm = document.getElementById('employee-profile-form');
+const profilePhotoInput = document.getElementById('profile-photo-input');
+const profilePhotoPreview = document.getElementById('profile-photo-preview');
+let pendingProfileImage = '';
+
+if (profilePhotoInput) {
+  profilePhotoInput.addEventListener('change', () => {
+    const file = profilePhotoInput.files?.[0];
+    const status = document.getElementById('employee-profile-status');
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      profilePhotoInput.value = '';
+      if (status) {
+        status.textContent = 'Choose a JPEG, PNG, or WebP image smaller than 5 MB.';
+        status.classList.add('status-error');
+      }
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      pendingProfileImage = String(reader.result || '');
+      if (profilePhotoPreview) profilePhotoPreview.src = pendingProfileImage;
+      if (status) {
+        status.textContent = 'New photo selected. Save your profile to upload it.';
+        status.classList.remove('status-error');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+if (employeeProfileForm) {
+  employeeProfileForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = document.getElementById('employee-profile-status');
+    const submitButton = employeeProfileForm.querySelector('button[type="submit"]');
+    const payload = Object.fromEntries(new FormData(employeeProfileForm).entries());
+    if (pendingProfileImage) payload.profileImage = pendingProfileImage;
+    if (submitButton) submitButton.disabled = true;
+    if (status) {
+      status.textContent = 'Saving profile changes...';
+      status.classList.remove('status-error', 'status-success');
+    }
+    try {
+      const data = await fetchJson('/employee/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const imageUrl = data.employee?.profileImage?.url;
+      if (imageUrl) {
+        document.querySelectorAll('.navbar-profile-avatar img').forEach((image) => { image.src = imageUrl; });
+        if (profilePhotoPreview) profilePhotoPreview.src = imageUrl;
+      }
+      pendingProfileImage = '';
+      profilePhotoInput.value = '';
+      employeeProfileForm.elements.currentPassword.value = '';
+      employeeProfileForm.elements.newPassword.value = '';
+      if (status) {
+        status.textContent = data.message;
+        status.classList.add('status-success');
+      }
+      showToast(data.message, 'success');
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message;
+        status.classList.add('status-error');
+      }
+      showToast(error.message, 'error');
+    } finally {
+      if (submitButton) submitButton.disabled = false;
     }
   });
 }
@@ -2087,6 +2287,9 @@ if (joinWorkForm) {
       joinWorkModal.hidden = true;
       joinWorkForm.reset();
       await loadDailyWorkSession();
+      if (window.location.pathname === '/employee/attendance') {
+        window.location.href = '/employee/work-session';
+      }
     } catch (error) {
       if (status) {
         status.textContent = error.message;
@@ -2587,6 +2790,7 @@ async function scanEmployeeFaceLogin() {
   }
 
   employeeLoginInFlight = true;
+  startFaceScanProgress('login');
   setEmployeeLoginConfidence(0);
   if (state) state.textContent = 'Detecting Face';
   setScannerState('employee-login-scanner-state', 'Analyzing Face', 'scanning');
@@ -2600,6 +2804,7 @@ async function scanEmployeeFaceLogin() {
     updateText('employee-login-quality-state', frameMetrics.qualityLabel);
 
     if (!frameMetrics.canSend) {
+      finishFaceScanProgress('login', false, 'Improve lighting or clarity');
       if (state) state.textContent = frameMetrics.brightnessLabel;
       setEmployeeLoginConfidence(0);
       setScannerState('employee-login-scanner-state', 'Improve Frame', 'warning');
@@ -2620,6 +2825,7 @@ async function scanEmployeeFaceLogin() {
 
     updateEmployeeLoginTelemetry(data, canvas, frameMetrics);
     if (!data.recognized) {
+      finishFaceScanProgress('login', false, 'Face not matched - scan again');
       const qualitySummary = summarizeEmployeeLoginQuality(data, frameMetrics);
       const statusMessage = [
         friendlyFaceMessage(data.message || 'Face not recognized.', data.stage).text,
@@ -2633,6 +2839,7 @@ async function scanEmployeeFaceLogin() {
     }
 
     if (state) state.textContent = 'Sign In success';
+    finishFaceScanProgress('login', true, 'Face matched - signing in');
     setScannerState('employee-login-scanner-state', 'Verified Successfully', 'success');
     setEmployeeFaceLoginLoadingMessage('');
     setEmployeeFaceLoginStatus(`Sign In success. Welcome ${data.employee?.name || 'Employee'}.`);
@@ -2641,6 +2848,7 @@ async function scanEmployeeFaceLogin() {
       window.location.href = data.redirectTo || '/employee';
     }, 800);
   } catch (error) {
+    finishFaceScanProgress('login', false, 'Scan failed - try again');
     if (state) state.textContent = 'Face not recognized';
     setEmployeeLoginConfidence(0);
     setScannerState('employee-login-scanner-state', 'Scan Failed', 'error');
@@ -2671,6 +2879,7 @@ async function startEmployeeFaceLogin() {
   }
 
   setEmployeeFaceLoginLoading(true);
+  setFaceScanProgress('login', 0, 'Opening camera', 'idle');
   try {
     employeeLoginStream = await navigator.mediaDevices.getUserMedia({
       video: {
@@ -3495,6 +3704,14 @@ const NotificationCenter = (() => {
     socket.on('schedule:updated', (schedule) => {
       applyScheduleToUI(schedule);
       showToast('Work schedule updated by Admin.', 'info');
+    });
+    socket.on('profile:updated', (profile) => {
+      if (profile.profileImageUrl) {
+        document.querySelectorAll('.navbar-profile-avatar img, #enrollment-profile-photo, #profile-photo-preview')
+          .forEach((image) => { image.src = profile.profileImageUrl; });
+      }
+      const topbarName = document.querySelector('.topbar .search-box input');
+      if (topbarName && profile.name) topbarName.value = profile.name;
     });
 
     const incrementMetric = (id, amount = 1) => {

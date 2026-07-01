@@ -783,6 +783,83 @@ code {
   cursor: pointer;
 }
 
+.scan-stage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+  gap: 16px;
+  align-items: center;
+}
+
+.face-scan-progress {
+  padding: 16px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 14px;
+  background: rgba(8, 18, 35, 0.72);
+  box-shadow: inset 0 0 24px rgba(34, 211, 238, 0.05);
+}
+
+.face-scan-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.face-scan-progress-head strong { color: #22d3ee; font-size: 1.15rem; letter-spacing: 0; }
+.face-scan-progress-track { height: 10px; margin: 12px 0 9px; overflow: hidden; border-radius: 999px; background: rgba(148, 163, 184, 0.15); }
+.face-scan-progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #22d3ee, #8b5cf6); box-shadow: 0 0 14px rgba(34, 211, 238, 0.55); transition: width 240ms ease; }
+.face-scan-progress small { color: #94a3b8; }
+.face-scan-progress[data-state="success"] .face-scan-progress-head strong { color: #34d399; }
+.face-scan-progress[data-state="success"] .face-scan-progress-track span { background: linear-gradient(90deg, #22c55e, #34d399); }
+.face-scan-progress[data-state="error"] .face-scan-progress-head strong { color: #fb7185; }
+
+@media (max-width: 760px) {
+  .scan-stage-layout { grid-template-columns: 1fr; }
+}
+
+.navbar-profile-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  overflow: hidden;
+  border: 2px solid rgba(34, 211, 238, 0.45);
+  border-radius: 50%;
+  background: #17233b;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+.navbar-profile-avatar:hover { transform: translateY(-1px); border-color: #22d3ee; }
+.navbar-profile-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.enrollment-profile-summary,
+.profile-photo-editor {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.enrollment-profile-summary { margin: 0 0 18px; padding: 18px 22px; border: 1px solid rgba(34, 211, 238, 0.18); border-radius: 16px; background: rgba(13, 25, 46, 0.7); }
+.enrollment-profile-summary img,
+.profile-photo-editor img { width: 92px; height: 92px; flex: 0 0 92px; object-fit: cover; border: 3px solid rgba(34, 211, 238, 0.42); border-radius: 50%; background: #17233b; }
+.enrollment-profile-summary div { display: grid; gap: 4px; }
+.enrollment-profile-summary strong { font-size: 1.05rem; }
+.enrollment-profile-summary span { color: #94a3b8; font-size: 0.85rem; }
+.profile-editor { max-width: 960px; }
+.profile-photo-editor { margin-bottom: 10px; padding-bottom: 22px; border-bottom: 1px solid rgba(148, 163, 184, 0.15); }
+.profile-photo-picker { display: inline-flex; margin-top: 8px; cursor: pointer; }
+.profile-password-section { margin-top: 10px; padding: 20px; border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 14px; }
+.profile-password-section h3 { margin-bottom: 14px; }
+.profile-password-section small { color: #94a3b8; font-weight: 400; }
+.password-recovery-card { width: min(100%, 560px); margin: auto; }
+
+@media (max-width: 600px) {
+  .navbar-profile-avatar { width: 36px; height: 36px; flex-basis: 36px; }
+  .profile-photo-editor, .enrollment-profile-summary { align-items: flex-start; }
+  .profile-photo-editor img, .enrollment-profile-summary img { width: 72px; height: 72px; flex-basis: 72px; }
+}
+
 .event-type-card i {
   color: var(--cyan);
   font-size: 1.55rem;

@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    designation: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     phoneNumber: {
       type: String,
       trim: true,
@@ -56,8 +61,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    passwordResetTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   { timestamps: true }
 );
+
+userSchema.index({ passwordResetTokenHash: 1, passwordResetExpiresAt: 1 });
 
 module.exports = mongoose.model('User', userSchema);

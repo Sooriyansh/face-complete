@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'change-this-auth-secret-in-env';
 const AUTH_COOKIE = 'faceai_auth';
@@ -12,14 +13,19 @@ function parseCookies(cookieHeader = '') {
   }, {});
 }
 
-function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-  const hash = crypto.pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
-  return { hash, salt };
+function hashPassword(password) {
+  return { hash: bcrypt.hashSync(password, 12), salt: 'bcrypt' };
 }
 
 function verifyPassword(password, user) {
-  const { hash } = hashPassword(password, user.passwordSalt);
-  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.passwordHash, 'hex'));
+  if (!user?.passwordHash) return false;
+  if (String(user.passwordHash).startsWith('$2')) {
+    return bcrypt.compareSync(password, user.passwordHash);
+  }
+  const legacyHash = crypto.pbkdf2Sync(password, user.passwordSalt, 120000, 64, 'sha512').toString('hex');
+  const stored = Buffer.from(user.passwordHash, 'hex');
+  const candidate = Buffer.from(legacyHash, 'hex');
+  return stored.length === candidate.length && crypto.timingSafeEqual(candidate, stored);
 }
 
 function signJwt(payload) {

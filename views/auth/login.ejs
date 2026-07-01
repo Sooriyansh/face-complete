@@ -79,15 +79,22 @@
           </div>
 
           <div class="camera-shell face-login-shell">
-            <div class="camera-frame scanner-frame biometric-camera">
-              <video id="employee-login-camera-feed" autoplay playsinline muted></video>
-              <canvas id="employee-login-camera-canvas" hidden></canvas>
-              <span class="camera-reticle"></span>
-              <span class="scan-line camera-scan"></span>
-              <span class="face-mesh-overlay" aria-hidden="true"></span>
-              <span class="face-box" id="employee-login-face-box" hidden></span>
-              <div class="scanner-state" id="employee-login-scanner-state">Camera ready</div>
-              <div class="face-guide"><span></span><span></span><span></span><span></span></div>
+            <div class="scan-stage-layout">
+              <div class="camera-frame scanner-frame biometric-camera">
+                <video id="employee-login-camera-feed" autoplay playsinline muted></video>
+                <canvas id="employee-login-camera-canvas" hidden></canvas>
+                <span class="camera-reticle"></span>
+                <span class="scan-line camera-scan"></span>
+                <span class="face-mesh-overlay" aria-hidden="true"></span>
+                <span class="face-box" id="employee-login-face-box" hidden></span>
+                <div class="scanner-state" id="employee-login-scanner-state">Camera ready</div>
+                <div class="face-guide"><span></span><span></span><span></span><span></span></div>
+              </div>
+              <div class="face-scan-progress" id="login-scan-progress" data-state="idle" aria-label="Face sign-in progress">
+                <div class="face-scan-progress-head"><span>FACE MATCH</span><strong id="login-scan-progress-value">0%</strong></div>
+                <div class="face-scan-progress-track"><span id="login-scan-progress-fill"></span></div>
+                <small id="login-scan-progress-label">Ready to scan</small>
+              </div>
             </div>
             <div class="quality-grid">
               <div><strong id="employee-login-confidence">Match Accuracy 0.0%</strong><span>Face match accuracy</span></div>

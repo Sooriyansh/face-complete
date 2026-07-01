@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile | FaceAI Attend</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/shared/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body data-role="employee">
+  <% const safeEmployee = employee || {}; const profileUrl = safeEmployee.profileImage && safeEmployee.profileImage.url ? safeEmployee.profileImage.url : '/images/default-avatar.svg'; %>
+  <div class="enterprise-layout employee-layout">
+    <%- include('partials/sidebar', { activePage: 'profile' }) %>
+    <main class="workspace">
+      <%- include('partials/topbar', { syncLabel: 'Profile settings' }) %>
+      <section class="page-hero reveal"><div><span class="status-chip"><i class="fa-solid fa-user-gear"></i> Employee account</span><h1>My Profile</h1><p>Update your personal details, profile photo, and password.</p></div></section>
+      <section class="panel profile-editor reveal">
+        <form id="employee-profile-form" class="stack-form">
+          <div class="profile-photo-editor">
+            <img id="profile-photo-preview" src="<%= profileUrl %>" data-fallback="/images/default-avatar.svg" alt="<%= safeEmployee.name || 'Employee' %> profile photo" onerror="this.src=this.dataset.fallback">
+            <div><h2><%= safeEmployee.name || 'Employee' %></h2><p class="helper-text">JPEG, PNG, or WebP. Maximum 5 MB.</p><label class="btn btn-secondary profile-photo-picker"><i class="fa-solid fa-camera"></i> Change Photo<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden></label></div>
+          </div>
+          <div class="form-grid">
+            <label><span>Name</span><input name="name" value="<%= safeEmployee.name || '' %>" required></label>
+            <label><span>Email</span><input type="email" name="email" value="<%= safeEmployee.email || '' %>" required></label>
+            <label><span>Phone Number</span><input name="phoneNumber" value="<%= safeEmployee.phoneNumber || '' %>" required></label>
+            <label><span>Department</span><input name="department" value="<%= safeEmployee.department || '' %>" required></label>
+            <label><span>Designation</span><input name="designation" value="<%= safeEmployee.designation || '' %>" placeholder="Software Engineer"></label>
+          </div>
+          <div class="profile-password-section"><h3>Change Password <small>(optional)</small></h3><div class="form-grid"><label><span>Current Password</span><input type="password" name="currentPassword" autocomplete="current-password"></label><label><span>New Password</span><input type="password" name="newPassword" minlength="8" autocomplete="new-password"></label></div></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Profile</button>
+          <p class="form-status" id="employee-profile-status"></p>
+        </form>
+      </section>
+    </main>
+  </div>
+  <%- include('partials/scripts') %>
+</body>
+</html>

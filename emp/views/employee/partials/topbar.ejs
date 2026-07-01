@@ -7,6 +7,8 @@
     <span class="sync-pill"><span class="live-dot"></span><%= typeof syncLabel !== 'undefined' ? syncLabel : 'Personal live sync' %></span>
     <span class="clock" id="real-time-clock">--:--</span>
     <button class="icon-button notification-trigger" id="notification-button" type="button" aria-label="Notifications"><i class="fa-solid fa-bell"></i><span class="notification-count" id="notification-count" hidden>0</span></button>
-    <span class="avatar"><%= topbarEmployee ? topbarEmployee.name.slice(0,2).toUpperCase() : (topbarUser ? topbarUser.name.slice(0,2).toUpperCase() : 'EM') %></span>
+    <a class="navbar-profile-avatar" href="/employee/profile" aria-label="Open profile">
+      <img src="<%= topbarEmployee && topbarEmployee.profileImage && topbarEmployee.profileImage.url ? topbarEmployee.profileImage.url : '/images/default-avatar.svg' %>" data-fallback="/images/default-avatar.svg" alt="Profile" onerror="this.src=this.dataset.fallback">
+    </a>
   </div>
 </header>

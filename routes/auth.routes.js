@@ -11,6 +11,9 @@ router.post('/admin-login', rateLimitAuth, authController.handlePasswordLogin('a
 router.get('/signup', authController.showSignup);
 router.get('/admin-signup', authController.showAdminSignup);
 router.get('/forgot-password', authController.showForgotPassword);
+router.post('/forgot-password', rateLimitAuth, authController.requestPasswordReset);
+router.get('/reset-password/:token', authController.showResetPassword);
+router.post('/reset-password/:token', rateLimitAuth, authController.resetPassword);
 router.post('/signup', rateLimitAuth, authController.signup);
 router.post('/employee-face-login', rateLimitAuth, authController.employeeFaceLogin);
 router.post('/logout', authController.logout);

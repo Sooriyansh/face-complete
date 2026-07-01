@@ -16,6 +16,10 @@
     <main class="workspace">
       <%- include('partials/topbar', { syncLabel: 'Face registration' }) %>
       <section class="page-hero reveal"><div><span class="status-chip"><span class="live-dot"></span>Face sign-in profile</span><h1>Face Registration</h1><p>Register or update your face photos with guided checks and secure upload.</p></div></section>
+      <section class="enrollment-profile-summary reveal">
+        <img id="enrollment-profile-photo" src="<%= safeEmployee && safeEmployee.profileImage && safeEmployee.profileImage.url ? safeEmployee.profileImage.url : '/images/default-avatar.svg' %>" data-fallback="/images/default-avatar.svg" alt="Employee profile photo" onerror="this.src=this.dataset.fallback">
+        <div><strong><%= safeEmployee ? safeEmployee.name : 'Employee' %></strong><span>Profile photo used across your employee account</span></div>
+      </section>
       <section class="panel enrollment-panel reveal" id="identity-enrollment">
         <div class="panel-header split"><div><p class="eyebrow">Employee face registration</p><h2>Face Registration</h2><p class="helper-text">Register or update your face photos with position guidance, quality checks, and secure upload.</p></div><span class="status-badge enrollment-<%= String(safeEmployee && safeEmployee.enrollmentStatus ? safeEmployee.enrollmentStatus : 'Pending').toLowerCase().replaceAll(' ', '-') %>"><%= safeEmployee && safeEmployee.enrollmentStatus ? safeEmployee.enrollmentStatus : 'Pending' %></span></div>
         <form id="student-form" class="stack-form biometric-enrollment-form" data-student-id="<%= safeEmployee ? safeEmployee._id : '' %>">

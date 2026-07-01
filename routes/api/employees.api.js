@@ -1,6 +1,7 @@
 const express = require('express');
 
 const Student = require('../../models/Student');
+const User = require('../../models/User');
 const { deleteImages, uploadImageBuffer } = require('../../services/cloudinary');
 const { tryRebuildFaceModelFromCloud } = require('../../services/faceModel');
 const { stopWorkerProcess } = require('../../services/faceRecognition');
@@ -91,6 +92,7 @@ router.post('/', async (req, res, next) => {
         joiningDate,
         department,
         email,
+        profileImage: savedImages[0] ? { url: savedImages[0].url, publicId: savedImages[0].publicId } : undefined,
         enrollmentImages: savedImages,
         enrollmentStatus: 'Pending',
       });
@@ -161,10 +163,16 @@ router.put('/:studentId/enrollment', async (req, res, next) => {
     try {
       savedImages = await saveEnrollmentImages(student.faceLabel, enrollmentImages, savedImages);
       student.enrollmentImages = savedImages;
+      student.profileImage = { url: savedImages[0].url, publicId: savedImages[0].publicId };
+      student.faceLoginEnabled = true;
       student.enrollmentStatus = 'Pending';
       student.enrollmentReviewedAt = null;
       student.enrollmentReviewNote = 'Updated by employee from biometric scanner.';
       await student.save();
+      await User.findOneAndUpdate(
+        { role: 'employee', $or: [{ employeeProfile: student._id }, { email: student.email }] },
+        { employeeProfile: student._id, faceLoginEnabled: true }
+      );
       const modelBuild = await tryRebuildFaceModelFromCloud();
       if (modelBuild.success) {
         stopWorkerProcess();

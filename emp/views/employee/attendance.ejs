@@ -19,17 +19,39 @@
         <div class="panel scanner-console">
           <div class="panel-header"><div><p class="eyebrow">Face Scan Camera Preview</p><h2>Mark Attendance</h2></div><span class="panel-badge"><span class="live-dot"></span>Employee only</span></div>
           <div class="camera-shell">
-            <div class="camera-frame scanner-frame large">
-              <video id="camera-feed" autoplay playsinline muted></video>
-              <canvas id="camera-canvas" hidden></canvas>
-              <span class="camera-reticle"></span><span class="scan-line camera-scan"></span><span class="face-box" id="attendance-face-box" hidden></span>
-              <div class="scanner-state" id="attendance-scanner-state">Starting camera</div>
+            <div class="scan-stage-layout">
+              <div class="camera-frame scanner-frame large">
+                <video id="camera-feed" autoplay playsinline muted></video>
+                <canvas id="camera-canvas" hidden></canvas>
+                <span class="camera-reticle"></span><span class="scan-line camera-scan"></span><span class="face-box" id="attendance-face-box" hidden></span>
+                <div class="scanner-state" id="attendance-scanner-state">Starting camera</div>
+              </div>
+              <div class="face-scan-progress" id="attendance-scan-progress" data-state="idle" aria-label="Face scan progress">
+                <div class="face-scan-progress-head"><span>FACE MATCH</span><strong id="attendance-scan-progress-value">0%</strong></div>
+                <div class="face-scan-progress-track"><span id="attendance-scan-progress-fill"></span></div>
+                <small id="attendance-scan-progress-label">Ready to scan</small>
+              </div>
             </div>
             <div class="quality-grid">
               <div><strong id="attendance-confidence">Match accuracy 0%</strong><span>Live match accuracy</span></div>
               <div><strong id="attendance-face-state">Ready</strong><span>Face position</span></div>
               <div><strong id="attendance-light-state">Lighting pending</strong><span>Lighting check</span></div>
               <div><strong id="attendance-quality-state">Quality pending</strong><span>Photo clarity check</span></div>
+            </div>
+            <!-- Scan countdown timer (shown below face box) -->
+            <div id="scan-countdown-timer" hidden style="margin: 10px 0 4px; padding: 10px 14px; background: rgba(34,211,238,0.07); border: 1px solid rgba(34,211,238,0.18); border-radius: 10px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <span style="font-size:12px; color:#94a3b8; font-weight:600; letter-spacing:.03em;">⏱ SCAN TIMER</span>
+                <span class="scan-timer-label" style="font-size:12px; color:#22d3ee; font-weight:700;">Scanning...</span>
+              </div>
+              <div style="height:5px; border-radius:99px; background:rgba(255,255,255,0.08); overflow:hidden;">
+                <div class="scan-timer-bar-fill" style="height:100%; width:0%; border-radius:99px; background:linear-gradient(90deg,#22d3ee,#a78bfa); transition:width 0.1s linear;"></div>
+              </div>
+            </div>
+            <!-- Problem hints section -->
+            <div id="scan-problem-hints" style="display:none; margin: 8px 0; padding: 10px 14px; background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px;">
+              <p style="font-size:12px; color:#f87171; font-weight:700; margin:0 0 6px;">⚠ Face Scan Kyun Nahi Ho Raha?</p>
+              <ul id="scan-problem-list" style="margin:0; padding-left:16px; font-size:12px; color:#fca5a5; line-height:1.7;"></ul>
             </div>
             <div class="camera-controls">
               <button type="button" id="start-camera" class="btn btn-primary"><i class="fa-solid fa-video"></i> Start Camera</button>
@@ -53,6 +75,7 @@
       </section>
     </main>
   </div>
+  <%- include('partials/work-session-modals') %>
   <%- include('partials/scripts') %>
 </body>
 </html>

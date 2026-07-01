@@ -1,9 +1,11 @@
+const crypto = require('crypto');
 const Student = require('../../models/Student');
 const User = require('../../models/User');
 const { deleteImages, uploadImageBuffer } = require('../../services/cloudinary');
 const { tryRebuildFaceModelFromCloud } = require('../../services/faceModel');
 const { runRecognition } = require('../../services/faceRecognition');
 const { clearAuthCookie, hashPassword, setAuthCookie, verifyPassword } = require('../../services/auth/auth.service');
+const { sendPasswordResetEmail } = require('../../services/email');
 
 async function saveBiometricEnrollment(faceLabel, images, savedImages = []) {
   const safeFaceLabel = String(faceLabel || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -65,7 +67,102 @@ function showAdminSignup(req, res) {
 }
 
 function showForgotPassword(req, res) {
-  res.render('auth/forgot-password');
+  res.render('auth/forgot-password', { error: '', success: '' });
+}
+
+function resetTokenHash(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+async function requestPasswordReset(req, res, next) {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    return res.status(400).render('auth/forgot-password', { error: 'Enter a valid email address.', success: '' });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+    if (user && user.accountStatus !== 'disabled') {
+      const token = crypto.randomBytes(32).toString('hex');
+      user.passwordResetTokenHash = resetTokenHash(token);
+      user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+      const baseUrl = String(process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      try {
+        await sendPasswordResetEmail({
+          email: user.email,
+          name: user.name,
+          resetUrl: `${baseUrl}/reset-password/${token}`,
+        });
+      } catch (error) {
+        user.passwordResetTokenHash = null;
+        user.passwordResetExpiresAt = null;
+        await user.save().catch(() => {});
+        console.error('Password reset email delivery failed:', error.message);
+      }
+    }
+    return res.render('auth/forgot-password', {
+      error: '',
+      success: 'If an active account exists for that email, a password reset link has been sent.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function showResetPassword(req, res, next) {
+  try {
+    const token = String(req.params.token || '');
+    const { hash, salt } = hashPassword(password);
+    const user = await User.findOneAndUpdate(
+      {
+        passwordResetTokenHash: resetTokenHash(token),
+        passwordResetExpiresAt: { $gt: new Date() },
+      },
+      {
+        $set: { passwordHash: hash, passwordSalt: salt },
+        $unset: { passwordResetTokenHash: 1, passwordResetExpiresAt: 1 },
+      },
+      { returnDocument: 'after' }
+    );
+    res.status(user ? 200 : 400).render('auth/reset-password', {
+      token: user ? token : '',
+      error: user ? '' : 'This password reset link is invalid or has expired.',
+      success: '',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    const token = String(req.params.token || '');
+    const password = String(req.body.password || '');
+    const confirmPassword = String(req.body.confirmPassword || '');
+    if (password.length < 8 || password !== confirmPassword) {
+      return res.status(400).render('auth/reset-password', {
+        token,
+        error: password.length < 8 ? 'Password must contain at least 8 characters.' : 'Passwords do not match.',
+        success: '',
+      });
+    }
+    const user = await User.findOne({
+      passwordResetTokenHash: resetTokenHash(token),
+      passwordResetExpiresAt: { $gt: new Date() },
+    }).select('+passwordResetTokenHash +passwordResetExpiresAt');
+    if (!user) {
+      return res.status(400).render('auth/reset-password', {
+        token: '', error: 'This password reset link is invalid or has expired.', success: '',
+      });
+    }
+    clearAuthCookie(res);
+    return res.render('auth/reset-password', {
+      token: '', error: '', success: 'Password updated successfully. You can now sign in.',
+    });
+  } catch (error) {
+    next(error);
+  }
 }
 
 const handlePasswordLogin = (forcedRole = 'employee') => async (req, res, next) => {
@@ -164,6 +261,9 @@ async function signup(req, res, next) {
           department,
           email,
           phoneNumber,
+          profileImage: savedImages[0]
+            ? { url: savedImages[0].url, publicId: savedImages[0].publicId }
+            : undefined,
           faceLoginEnabled: hasBiometricEnrollment,
           biometricEncryptionStatus: hasBiometricEnrollment ? 'Encrypted' : 'Pending',
           livenessStatus: hasBiometricEnrollment ? 'Passed' : 'Pending',
@@ -308,9 +408,12 @@ module.exports = {
   employeeFaceLogin,
   handlePasswordLogin,
   logout,
+  requestPasswordReset,
+  resetPassword,
   showAdminLogin,
   showAdminSignup,
   showForgotPassword,
+  showResetPassword,
   showLogin,
   showSignup,
   signup,

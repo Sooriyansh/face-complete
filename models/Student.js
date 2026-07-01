@@ -31,10 +31,19 @@ const studentSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    designation: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     phoneNumber: {
       type: String,
       trim: true,
       default: '',
+    },
+    profileImage: {
+      url: { type: String, trim: true, default: '' },
+      publicId: { type: String, trim: true, default: '' },
     },
     faceLoginEnabled: {
       type: Boolean,
