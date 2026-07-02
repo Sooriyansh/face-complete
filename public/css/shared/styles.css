@@ -7177,3 +7177,230 @@ tbody tr:hover,
     bottom: 0.75rem;
   }
 }
+
+/* Requested site palette override */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --primary: #898AC4;
+  --secondary: #A2AADB;
+  --accent: #C0C9EE;
+  --dark: #2F315F;
+  --background: #fff2E0;
+  --card-bg: #FFFFFF;
+  --navbar-bg: #fff2E0;
+  --sidebar-bg: #898AC4;
+  --text-primary: #2F315F;
+  --text-secondary: #5F638F;
+  --border-natural: #C0C9EE;
+  --success: #898AC4;
+  --warning: #A2AADB;
+  --danger: #5F638F;
+  --bg-0: var(--background);
+  --bg-1: var(--background);
+  --bg-2: var(--background);
+  --panel: var(--card-bg);
+  --panel-strong: var(--card-bg);
+  --panel-soft: #fff2E0;
+  --border: var(--border-natural);
+  --border-strong: var(--primary);
+  --text: var(--text-primary);
+  --text-muted: var(--text-secondary);
+  --text-soft: var(--text-secondary);
+  --cyan: var(--primary);
+  --teal: var(--secondary);
+  --sky: var(--secondary);
+  --violet: var(--accent);
+  --line-hot: var(--primary);
+  --shadow: 0 16px 38px color-mix(in srgb, #898AC4 18%, transparent);
+  --glow: 0 10px 28px color-mix(in srgb, #898AC4 22%, transparent);
+}
+
+body,
+.auth-page {
+  background: var(--background);
+}
+
+.navbar,
+.topbar,
+.auth-top-nav {
+  background: var(--navbar-bg);
+}
+
+.side-nav {
+  background: var(--sidebar-bg);
+  border-color: var(--primary);
+}
+
+.page-hero,
+.hero-section,
+.hero-panel {
+  background: linear-gradient(135deg, #fff2E0, #C0C9EE);
+}
+
+.brand-block,
+.rbac-card,
+.side-menu a:hover,
+.side-menu a.active {
+  background: color-mix(in srgb, #A2AADB 36%, #898AC4);
+  border-color: #C0C9EE;
+}
+
+.panel,
+.metric-card,
+.summary-tile,
+.event-type-card,
+.auth-panel,
+.camera-shell,
+.session-status-card,
+.notification-panel,
+.daily-plan-card,
+.preview-card,
+.user-card,
+.timeline-item,
+.search-box,
+.control-panel,
+.table-wrap,
+.toast,
+.global-loader-card {
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border-color: var(--border-natural);
+}
+
+.btn-primary,
+.brand-mark,
+.logo-icon,
+.metric-icon,
+.notification-icon,
+.timeline-item span,
+.avatar,
+.face-orbit,
+.global-loader-retry,
+.theme-toggle,
+.notification-tabs button.active,
+.auth-tab.is-active,
+.quick-filter-group button.active,
+.quick-filter-group button:hover {
+  color: #2F315F;
+  background: #A2AADB;
+  border-color: #898AC4;
+}
+
+.btn-primary:hover,
+.global-loader-retry:hover,
+.theme-toggle:hover {
+  color: #2F315F;
+  background: #C0C9EE;
+}
+
+.btn-secondary,
+.icon-button,
+.mobile-menu-toggle,
+.status-chip,
+.panel-badge,
+.security-badge,
+.sync-pill,
+.clock,
+.event-pill,
+.toggle-pill,
+.status-badge,
+.notification-tabs button,
+.auth-tab,
+.quick-filter-group button,
+thead th,
+th,
+.face-login-instructions span {
+  color: #2F315F;
+  background: #C0C9EE;
+  border-color: #A2AADB;
+}
+
+.stack-form input,
+.stack-form select,
+.stack-form textarea,
+.auth-form input,
+.auth-form select,
+.filter-controls input,
+.filter-controls select,
+.performance-filter-bar input,
+.performance-filter-bar select,
+.checkout-modal textarea,
+input,
+select,
+textarea,
+tbody tr:nth-child(even),
+.notification-item,
+.notification-empty,
+.form-status,
+.timeline-list > div,
+.activity-feed > div,
+.timeline-stream > div,
+.camera-frame,
+.biometric-camera,
+.face-frame,
+.scanner-visual,
+.face-scan-progress {
+  color: var(--text-primary);
+  background: #fff2E0;
+  border-color: #C0C9EE;
+}
+
+tbody tr:hover,
+.notification-item.unread {
+  background: #C0C9EE;
+}
+
+.scan-line,
+.camera-scan,
+.face-scan-progress-track span,
+.global-loader-bar span,
+.bar-chart span,
+.live-dot,
+.event-dot {
+  background: #898AC4;
+  box-shadow: 0 0 16px color-mix(in srgb, #898AC4 38%, transparent);
+}
+
+.support-call-button {
+  position: fixed;
+  right: 1rem;
+  top: 50%;
+  z-index: 180;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.9rem;
+  border-radius: 999px 0 0 999px;
+  color: #2F315F;
+  background: #A2AADB;
+  border: 1px solid #898AC4;
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  transform: translateY(-50%);
+  transition: transform 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+
+.support-call-button:hover,
+.support-call-button:focus-visible {
+  background: #C0C9EE;
+  box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, #898AC4 22%, transparent);
+  transform: translateY(-50%) translateX(-2px);
+}
+
+.support-call-button i {
+  font-size: 1rem;
+}
+
+@media (max-width: 760px) {
+  .support-call-button {
+    right: 0;
+    min-height: 46px;
+    padding: 0 0.8rem;
+  }
+
+  .support-call-button span {
+    display: none;
+  }
+}

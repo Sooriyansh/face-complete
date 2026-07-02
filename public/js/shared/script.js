@@ -431,6 +431,20 @@ function showToast(message, type = 'info') {
   window.setTimeout(() => toast.remove(), 3600);
 }
 
+function initSupportCallButton() {
+  if (document.getElementById('support-call-button')) {
+    return;
+  }
+
+  const button = document.createElement('a');
+  button.id = 'support-call-button';
+  button.className = 'support-call-button';
+  button.href = 'tel:+919755855367';
+  button.setAttribute('aria-label', 'Call website support at +91 97558 55367');
+  button.innerHTML = '<i class="fa-solid fa-headset"></i><span>Support</span>';
+  document.body.appendChild(button);
+}
+
 function initThemeToggle() {
   const storageKey = 'faceai-theme';
   const root = document.documentElement;
@@ -462,8 +476,12 @@ function initThemeToggle() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initThemeToggle);
+  document.addEventListener('DOMContentLoaded', () => {
+    initSupportCallButton();
+    initThemeToggle();
+  });
 } else {
+  initSupportCallButton();
   initThemeToggle();
 }
 
@@ -1219,7 +1237,7 @@ function startScanCountdown() {
     const label = timerEl.querySelector('.scan-timer-label');
     if (bar) bar.style.width = pct + '%';
     if (label) label.textContent = scanCountdownValue > 0
-      ? `Aagla scan ${(scanCountdownValue / 1000).toFixed(1)}s mein hoga`
+      ? `Next scan starts in ${(scanCountdownValue / 1000).toFixed(1)}s`
       : 'Scanning...';
     if (scanCountdownValue === 0) {
       scanCountdownValue = 1400;
@@ -1471,9 +1489,9 @@ async function scanCurrentFrame() {
       setScannerState('attendance-scanner-state', 'Improve Frame', 'warning');
       setRecognitionResult(`${frameMetrics.brightnessLabel} ${frameMetrics.qualityLabel}`, false);
       const frameProblems = [];
-      if (frameMetrics.brightness < 45) frameProblems.push('Roshni bahut kam hai — roshan jagah mein baithe ya light on karein.');
-      else if (frameMetrics.brightness > 220) frameProblems.push('Roshni bahut tej hai — direct light ya glare se door ho jayen.');
-      if (frameMetrics.contrast < 26) frameProblems.push('Camera blur hai — seedha baithein aur hilna band karein.');
+      if (frameMetrics.brightness < 45) frameProblems.push('Lighting is too low. Please move to a brighter area or turn on a light.');
+      else if (frameMetrics.brightness > 220) frameProblems.push('Lighting is too bright. Please move away from direct light or reduce glare.');
+      if (frameMetrics.contrast < 26) frameProblems.push('The camera image is blurry. Please sit straight and hold still.');
       updateScanProblems(frameProblems);
       return;
     }
@@ -1533,19 +1551,19 @@ async function scanCurrentFrame() {
       updateAttendanceScannerTelemetry(response, canvas, frameMetrics);
       setScannerState('attendance-scanner-state', response.stage === 'no_face' ? 'Center Face' : 'Face Not Recognized', 'error');
       
-      // Build problem list with clear Urdu/Hindi-friendly reasons
+      // Build problem list with clear reasons employees can act on.
       const problemReasons = [];
       if (response.stage === 'no_face') {
-        problemReasons.push('Koi chehra frame mein nahi mila — apna chehra center mein rakhein.');
+        problemReasons.push('No face was found in the frame. Please keep your face centered.');
       } else if (response.stage === 'multiple_faces') {
-        problemReasons.push('Ek se zyada log camera mein hain — akele rahein.');
+        problemReasons.push('More than one person is visible. Please scan alone.');
       } else if (response.stage === 'recognition' || response.stage === 'low_confidence') {
-        problemReasons.push(`Chehra pehchana nahi gaya (match ${(Number(response.confidence || 0) * 100).toFixed(1)}%) — seedha camera ki taraf dekhein.`);
+        problemReasons.push(`Face was not recognized (match ${(Number(response.confidence || 0) * 100).toFixed(1)}%). Please look directly at the camera.`);
       }
       if (!frameMetrics.canSend) {
-        if (frameMetrics.brightness < 45) problemReasons.push('Roshni bahut kam hai — roshan jagah mein baithe.');
-        else if (frameMetrics.brightness > 220) problemReasons.push('Roshni bahut zyada hai — glare kam karein.');
-        if (frameMetrics.contrast < 26) problemReasons.push('Tasveer blur hai — camera ke saamne seedha raho aur hilna band karo.');
+        if (frameMetrics.brightness < 45) problemReasons.push('Lighting is too low. Please move to a brighter area.');
+        else if (frameMetrics.brightness > 220) problemReasons.push('Lighting is too bright. Please reduce glare.');
+        if (frameMetrics.contrast < 26) problemReasons.push('The image is blurry. Please face the camera and hold still.');
       }
       if (qualityIssues && qualityIssues.length > 0) {
         qualityIssues.forEach(q => problemReasons.push(q));
@@ -1566,7 +1584,7 @@ async function scanCurrentFrame() {
       finishFaceScanProgress('attendance', false, 'Scan failed - try again');
       setRecognitionResult(error.message, false);
       setScannerState('attendance-scanner-state', 'Scan Failed', 'error');
-      updateScanProblems(['Server se response nahi mila — internet connection check karein aur dobara koshish karein.']);
+      updateScanProblems(['The server did not respond. Please check your internet connection and try again.']);
     } finally {
       setScanLoading(false);
       setScanStatus(cameraStream ? 'Camera live - real-time scan is active.' : 'Camera stopped');
