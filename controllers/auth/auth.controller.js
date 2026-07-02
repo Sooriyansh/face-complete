@@ -7,6 +7,8 @@ const { runRecognition } = require('../../services/faceRecognition');
 const { clearAuthCookie, hashPassword, setAuthCookie, verifyPassword } = require('../../services/auth/auth.service');
 const { sendPasswordResetEmail } = require('../../services/email');
 
+const EMPLOYEE_PASSWORD_LOGIN_DAILY_LIMIT = 6;
+
 async function saveBiometricEnrollment(faceLabel, images, savedImages = []) {
   const safeFaceLabel = String(faceLabel || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
   const batchId = Date.now();
@@ -68,6 +70,15 @@ function showAdminSignup(req, res) {
 
 function showForgotPassword(req, res) {
   res.render('auth/forgot-password', { error: '', success: '' });
+}
+
+function getLocalDayKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.NOTIFICATION_TIMEZONE || 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 }
 
 function resetTokenHash(token) {
@@ -185,6 +196,24 @@ const handlePasswordLogin = (forcedRole = 'employee') => async (req, res, next) 
         error: loginRole === 'admin' ? 'Admin email or password is incorrect.' : 'Employee ID/email or password is incorrect.',
         nextUrl: req.body.next || '',
       });
+    }
+
+    if (loginRole === 'employee') {
+      const todayKey = getLocalDayKey();
+      if (user.passwordLoginLimitDay !== todayKey) {
+        user.passwordLoginLimitDay = todayKey;
+        user.passwordLoginLimitCount = 0;
+      }
+
+      if (Number(user.passwordLoginLimitCount || 0) >= EMPLOYEE_PASSWORD_LOGIN_DAILY_LIMIT) {
+        return res.status(429).render('auth/login', {
+          error: 'Password sign-in limit reached for today. Please use face scan sign-in or try password sign-in again tomorrow.',
+          nextUrl: req.body.next || '',
+        });
+      }
+
+      user.passwordLoginLimitCount = Number(user.passwordLoginLimitCount || 0) + 1;
+      await user.save();
     }
 
     setAuthCookie(res, user);

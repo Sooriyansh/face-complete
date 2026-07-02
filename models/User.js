@@ -71,6 +71,15 @@ const userSchema = new mongoose.Schema(
       default: null,
       select: false,
     },
+    passwordLoginLimitDay: {
+      type: String,
+      default: '',
+    },
+    passwordLoginLimitCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );

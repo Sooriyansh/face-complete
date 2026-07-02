@@ -431,6 +431,42 @@ function showToast(message, type = 'info') {
   window.setTimeout(() => toast.remove(), 3600);
 }
 
+function initThemeToggle() {
+  const storageKey = 'faceai-theme';
+  const root = document.documentElement;
+  const savedTheme = localStorage.getItem(storageKey);
+  const initialTheme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light';
+  root.dataset.theme = initialTheme;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'theme-toggle';
+  button.setAttribute('aria-label', 'Toggle dark mode');
+
+  const syncButton = () => {
+    const isDark = root.dataset.theme === 'dark';
+    button.innerHTML = isDark
+      ? '<i class="fa-solid fa-sun"></i><span>Light</span>'
+      : '<i class="fa-solid fa-moon"></i><span>Dark</span>';
+    button.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+  };
+
+  button.addEventListener('click', () => {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(storageKey, root.dataset.theme);
+    syncButton();
+  });
+
+  syncButton();
+  document.body.appendChild(button);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initThemeToggle);
+} else {
+  initThemeToggle();
+}
+
 function initAdminEmployeeMessageTest() {
   const form = document.getElementById('admin-employee-message-form');
   if (!form) return;
@@ -2747,6 +2783,7 @@ function setEmployeeFaceLoginLoadingMessage(message = '') {
   const loader = document.getElementById('employee-face-login-loader');
   if (loader) {
     loader.textContent = message;
+    loader.hidden = true;
   }
 }
 
@@ -2794,8 +2831,8 @@ async function scanEmployeeFaceLogin() {
   setEmployeeLoginConfidence(0);
   if (state) state.textContent = 'Detecting Face';
   setScannerState('employee-login-scanner-state', 'Analyzing Face', 'scanning');
-  setEmployeeFaceLoginLoadingMessage('Analyzing frame quality before face matching...');
-  setEmployeeFaceLoginStatus('Detecting face and checking frame quality...');
+  setEmployeeFaceLoginLoadingMessage('');
+  setEmployeeFaceLoginStatus('Checking your face. Keep your face centered and avoid movement.');
 
   try {
     const context = drawVideoToScanCanvas(video, canvas);
@@ -2809,18 +2846,19 @@ async function scanEmployeeFaceLogin() {
       setEmployeeLoginConfidence(0);
       setScannerState('employee-login-scanner-state', 'Improve Frame', 'warning');
       setEmployeeFaceLoginLoadingMessage('');
-      setEmployeeFaceLoginStatus(`${frameMetrics.brightnessLabel} ${frameMetrics.qualityLabel}`, true);
+      setEmployeeFaceLoginStatus(`${frameMetrics.brightnessLabel} ${frameMetrics.qualityLabel}. Sit in clear light, keep the camera steady, and keep your face inside the frame.`, true);
       return;
     }
 
     if (state) state.textContent = 'Matching Face';
     setScannerState('employee-login-scanner-state', 'Matching Identity', 'matching');
-    setEmployeeFaceLoginLoadingMessage('Matching identity with secure face model...');
+    setEmployeeFaceLoginLoadingMessage('');
 
     const data = await fetchJson('/employee-face-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: canvas.toDataURL('image/jpeg', 0.82) }),
+      loaderSilent: true,
     });
 
     updateEmployeeLoginTelemetry(data, canvas, frameMetrics);
@@ -2834,7 +2872,7 @@ async function scanEmployeeFaceLogin() {
       if (state) state.textContent = data.stage === 'no_face' ? 'Center face' : 'Low match accuracy';
       setScannerState('employee-login-scanner-state', data.stage === 'no_face' ? 'Center Face' : 'Face Not Recognized', 'error');
       setEmployeeFaceLoginLoadingMessage('');
-      setEmployeeFaceLoginStatus(statusMessage, true, Boolean(qualitySummary.issueText));
+      setEmployeeFaceLoginStatus(`${statusMessage}. Keep one face centered, clean the camera if blurry, and use even front lighting.`, true, Boolean(qualitySummary.issueText));
       return;
     }
 
@@ -2896,7 +2934,7 @@ async function startEmployeeFaceLogin() {
     updateText('employee-login-light-state', 'Lighting pending');
     updateText('employee-login-quality-state', 'Quality pending');
     setScannerState('employee-login-scanner-state', 'Detecting Face', 'scanning');
-    setEmployeeFaceLoginStatus('Camera is on. Face matching has started.');
+    setEmployeeFaceLoginStatus('Camera is on. Keep your face inside the frame with clear light.');
     employeeLoginInterval = window.setInterval(scanEmployeeFaceLogin, 1400);
     window.setTimeout(scanEmployeeFaceLogin, 450);
   } catch (error) {
@@ -2940,7 +2978,7 @@ function setEmployeeFaceLoginLoading(isLoading) {
     retryButton.disabled = isLoading;
   }
 
-  setEmployeeFaceLoginLoadingMessage(isLoading ? 'Opening camera for face scan...' : '');
+  setEmployeeFaceLoginLoadingMessage('');
 }
 
 function activateEmployeeAuthTab(tabName, options = {}) {

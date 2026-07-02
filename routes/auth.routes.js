@@ -15,7 +15,7 @@ router.post('/forgot-password', rateLimitAuth, authController.requestPasswordRes
 router.get('/reset-password/:token', authController.showResetPassword);
 router.post('/reset-password/:token', rateLimitAuth, authController.resetPassword);
 router.post('/signup', rateLimitAuth, authController.signup);
-router.post('/employee-face-login', rateLimitAuth, authController.employeeFaceLogin);
+router.post('/employee-face-login', authController.employeeFaceLogin);
 router.post('/logout', authController.logout);
 
 module.exports = router;
