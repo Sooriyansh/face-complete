@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const SystemEvent = require('../../models/SystemEvent');
 const Student = require('../../models/Student');
 const User = require('../../models/User');
 const { deleteImages, uploadImageBuffer } = require('../../services/cloudinary');
@@ -8,6 +9,48 @@ const { clearAuthCookie, hashPassword, setAuthCookie, verifyPassword } = require
 const { sendPasswordResetEmail } = require('../../services/email');
 
 const EMPLOYEE_PASSWORD_LOGIN_DAILY_LIMIT = 6;
+
+async function findEmployeeProfileForUser(user) {
+  if (!user || user.role !== 'employee') return null;
+  const clauses = [
+    user.employeeProfile ? { _id: user.employeeProfile } : null,
+    user.email ? { email: user.email } : null,
+    user.employeeId ? { rollNumber: user.employeeId } : null,
+  ].filter(Boolean);
+  return clauses.length ? Student.findOne({ $or: clauses }).lean() : null;
+}
+
+async function recordEmployeeAuthEvent(req, user, event) {
+  if (!user || user.role !== 'employee') return null;
+  const employee = await findEmployeeProfileForUser(user);
+  const occurredAt = new Date();
+  const isLogout = event === 'Logout';
+  return SystemEvent.create({
+    event,
+    eventName: event,
+    eventType: 'session',
+    meaning: isLogout ? 'Employee logged out from the website.' : 'Employee logged in to the website.',
+    occurredAt,
+    eventId: isLogout ? 9002 : 9001,
+    sourceLog: 'WebsiteAuth',
+    provider: 'FaceAIAuth',
+    computer: req.get('host') || '',
+    employee: employee?._id || user.employeeProfile || null,
+    employeeId: employee?.rollNumber || user.employeeId || '',
+    employeeName: employee?.name || user.name || '',
+    user: employee?.name || user.name || user.email || '',
+    ipAddress: req.ip || '',
+    browser: String(req.get('user-agent') || '').slice(0, 120),
+    status: isLogout ? 'Logged Out' : 'Logged In',
+    message: isLogout ? 'Employee website logout recorded.' : 'Employee website login recorded.',
+    metadata: {
+      authUserId: String(user._id || ''),
+      source: 'website-auth',
+      email: user.email || '',
+    },
+    externalId: `auth:${event.toLowerCase()}:${user._id || employee?._id || 'employee'}:${occurredAt.getTime()}:${crypto.randomUUID()}`,
+  }).catch(() => null);
+}
 
 async function saveBiometricEnrollment(faceLabel, images, savedImages = []) {
   const safeFaceLabel = String(faceLabel || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -217,6 +260,7 @@ const handlePasswordLogin = (forcedRole = 'employee') => async (req, res, next) 
     }
 
     setAuthCookie(res, user);
+    await recordEmployeeAuthEvent(req, user, 'Login');
     const fallbackUrl = user.role === 'admin' ? '/' : '/employee';
     res.redirect(req.body.next || fallbackUrl);
   } catch (error) {
@@ -413,6 +457,7 @@ async function employeeFaceLogin(req, res, next) {
     }
 
     setAuthCookie(res, user);
+    await recordEmployeeAuthEvent(req, user, 'Login');
     res.json({
       success: true,
       recognized: true,
@@ -428,7 +473,8 @@ async function employeeFaceLogin(req, res, next) {
   }
 }
 
-function logout(req, res) {
+async function logout(req, res) {
+  await recordEmployeeAuthEvent(req, req.user, 'Logout');
   clearAuthCookie(res);
   res.redirect('/login');
 }

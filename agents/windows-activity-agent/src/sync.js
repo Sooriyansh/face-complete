@@ -109,14 +109,15 @@ function ensureSocket() {
 
 async function emitSocketHeartbeat(events) {
   const client = ensureSocket();
-  if (!client || !socketReady || !events.length) return;
+  if (!client || !socketReady) return;
   await new Promise((resolve) => {
     client.timeout(5000).emit('collector:heartbeat', {
       id: `${config.agentId}:${Date.now()}`,
       agentId: config.agentId,
       machineId: config.machineId,
       eventCount: events.length,
-      latestEventAt: events[events.length - 1]?.occurredAt,
+      latestEventAt: events[events.length - 1]?.occurredAt || null,
+      sentAt: new Date().toISOString(),
     }, (error) => {
       if (error) logger.warn('Socket.IO heartbeat was not acknowledged.', error.message);
       resolve();
@@ -127,7 +128,10 @@ async function emitSocketHeartbeat(events) {
 async function syncEvents(events) {
   const queued = readQueue();
   const batch = uniqueEvents([...queued, ...events]);
-  if (!batch.length) return;
+  if (!batch.length) {
+    await emitSocketHeartbeat([]);
+    return;
+  }
   try {
     const result = await postEvents(batch);
     await emitSocketHeartbeat(batch);

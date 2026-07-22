@@ -42,9 +42,11 @@ function sendSystemEventsExport(res, type, rows) {
 const ALLOWED_EVENTS = new Set([
   'Startup',
   'System Startup',
+  'Laptop Startup',
   'Shutdown',
   'System Shutdown',
   'Unexpected Shutdown',
+  'Abrupt Shutdown',
   'Restart',
   'System Restart',
   'Sleep',
@@ -52,6 +54,10 @@ const ALLOWED_EVENTS = new Set([
   'Wakeup',
   'Wake Up',
   'System Wake',
+  'SessionLock',
+  'SessionUnlock',
+  'SessionLogon',
+  'SessionLogoff',
   'Lock',
   'Unlock',
   'Screen Lock',
@@ -60,31 +66,33 @@ const ALLOWED_EVENTS = new Set([
   'Unlock Screen',
   'Login',
   'Logout',
+  'Employee Login',
+  'Employee Logout',
   'Windows Login',
   'Windows Logout',
   'Windows Sign In',
   'Windows Sign Out',
+  'User Session Start',
+  'User Session End',
+  'Session Connect',
+  'Session Disconnect',
   'Idle Time',
   'Idle State',
   'Active Usage',
   'Active State',
+  'Inactive Duration',
   'App Opened',
   'App Closed',
   'Application Started',
   'Application Stopped',
   'Application Switch',
-  'Website Visited',
-  'Active Window',
   'Active Application',
+  'Active Window',
+  'Website Visited',
   'Keyboard Activity',
   'Mouse Activity',
-  'Inactive Duration',
   'Display On',
   'Display Off',
-  'User Session Start',
-  'User Session End',
-  'Session Connect',
-  'Session Disconnect',
   'Network Online',
   'Network Offline',
   'Internet Connected',
@@ -181,9 +189,9 @@ function normalizeSystemEvent(rawEvent) {
 function inferEventType(event) {
   if (['Sleep', 'Wake', 'Wakeup', 'Wake Up', 'System Wake', 'Startup', 'System Startup', 'Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Restart', 'System Restart', 'System Boot Time', 'System Uptime'].includes(event)) return 'power';
   if (['Network Online', 'Network Offline', 'Internet Connected', 'Internet Disconnected'].includes(event)) return 'network';
-  if (['Idle Time', 'Idle State', 'Active Usage', 'Active State', 'Inactive Duration'].includes(event)) return 'activity';
+  if (['Idle Time', 'Idle State', 'Active Usage', 'Active State', 'Inactive Duration', 'Keyboard Activity', 'Mouse Activity'].includes(event)) return 'activity';
   if (['Website Visited', 'Active Window', 'Active Application', 'Application Switch', 'App Opened', 'App Closed', 'Application Started', 'Application Stopped'].includes(event)) return event === 'Website Visited' ? 'browser' : 'application';
-  if (['Login', 'Logout', 'Windows Login', 'Windows Logout', 'Windows Sign In', 'Windows Sign Out', 'User Session Start', 'User Session End', 'Session Connect', 'Session Disconnect', 'Lock', 'Unlock', 'Screen Lock', 'Screen Unlock', 'Lock Screen', 'Unlock Screen'].includes(event)) return 'session';
+  if (['SessionLock', 'SessionUnlock', 'SessionLogon', 'SessionLogoff', 'Lock', 'Unlock', 'Screen Lock', 'Screen Unlock', 'Login', 'Logout', 'Employee Login', 'Employee Logout', 'Windows Login', 'Windows Logout', 'Windows Sign In', 'Windows Sign Out', 'User Session Start', 'User Session End', 'Session Connect', 'Session Disconnect'].includes(event)) return 'session';
   return 'system';
 }
 
@@ -301,7 +309,7 @@ router.get('/', async (req, res, next) => {
     const to = dateRange?.end || parseDateQuery(req.query.to) || (mode === 'workday' ? workdayRange.end : null);
     const sortDirection = String(req.query.sort || '').toLowerCase() === 'asc' ? 1 : -1;
 
-    const query = {};
+    const query = { event: { $in: [...ALLOWED_EVENTS] } };
     if (from || to) {
       query.occurredAt = {};
       if (from) {
@@ -375,7 +383,8 @@ router.get('/', async (req, res, next) => {
       externalId: event.metadata?.externalId || `${session._id}:${event.type}:${new Date(event.occurredAt).getTime()}`,
     }))).filter((event) => {
       const time = new Date(event.occurredAt).getTime();
-      return (!from || time >= from.getTime()) && (!to || time <= to.getTime())
+      return ALLOWED_EVENTS.has(event.event)
+        && (!from || time >= from.getTime()) && (!to || time <= to.getTime())
         && (!selectedDepartment || event.department === selectedDepartment)
         && (!selectedEmployee || String(event.employee) === selectedEmployee);
     });
@@ -410,7 +419,7 @@ router.get('/export/:type', async (req, res, next) => {
     const from = parseDateQuery(req.query.from);
     const to = parseDateQuery(req.query.to);
     const dateRange = dateOnlyRange(String(req.query.date || ''));
-    const query = {};
+    const query = { event: { $in: [...ALLOWED_EVENTS] } };
     if (dateRange || from || to) {
       query.occurredAt = {};
       if (dateRange?.start || from) query.occurredAt.$gte = dateRange?.start || from;
@@ -468,7 +477,7 @@ router.get('/dashboard-summary', async (req, res, next) => {
     const from = dateRange?.start || parseDateQuery(req.query.from) || new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const to = dateRange?.end || parseDateQuery(req.query.to) || now;
 
-    const query = { occurredAt: { $gte: from, $lte: to } };
+    const query = { event: { $in: [...ALLOWED_EVENTS] }, occurredAt: { $gte: from, $lte: to } };
     if (selectedDepartment) {
       const employees = await Student.find({ department: selectedDepartment }).select('_id rollNumber name').lean();
       query.$or = employees.flatMap((employee) => compactOrQuery([
@@ -529,9 +538,9 @@ router.get('/dashboard-summary', async (req, res, next) => {
       const latest = row.latest || {};
       const statusEvent = latest.event;
       let status = 'Online';
-      if (['Shutdown', 'Unexpected Shutdown', 'Agent Offline', 'Network Offline'].includes(statusEvent)) status = 'Offline';
+      if (['Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown', 'Agent Offline', 'Network Offline'].includes(statusEvent)) status = 'Offline';
       if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(statusEvent)) status = 'Idle';
-      if (['Lock', 'Screen Lock'].includes(statusEvent)) status = 'Locked';
+      if (['SessionLock', 'Lock', 'Screen Lock'].includes(statusEvent)) status = 'Locked';
       if (statusEvent === 'Sleep') status = 'Sleeping';
       return {
         employee: latest.employee,
@@ -551,11 +560,12 @@ router.get('/dashboard-summary', async (req, res, next) => {
       period,
       range: { start: from, end: to },
       totals: {
-        signIn: (eventCounts.Login || 0) + (eventCounts['Windows Sign In'] || 0) + (eventCounts['User Session Start'] || 0),
-        signOut: (eventCounts.Logout || 0) + (eventCounts['Windows Sign Out'] || 0) + (eventCounts['User Session End'] || 0),
-        lockUnlock: (eventCounts.Lock || 0) + (eventCounts.Unlock || 0) + (eventCounts['Screen Lock'] || 0) + (eventCounts['Screen Unlock'] || 0),
-        sleepWake: (eventCounts.Sleep || 0) + (eventCounts.Wakeup || 0) + (eventCounts['System Wake'] || 0),
-        shutdownRestart: (eventCounts.Shutdown || 0) + (eventCounts['Unexpected Shutdown'] || 0) + (eventCounts.Restart || 0),
+        signIn: (eventCounts.Login || 0) + (eventCounts.SessionLogon || 0) + (eventCounts['Employee Login'] || 0) + (eventCounts['Windows Sign In'] || 0) + (eventCounts['User Session Start'] || 0),
+        signOut: (eventCounts.Logout || 0) + (eventCounts.SessionLogoff || 0) + (eventCounts['Employee Logout'] || 0) + (eventCounts['Windows Sign Out'] || 0) + (eventCounts['User Session End'] || 0),
+        lockUnlock: (eventCounts.SessionLock || 0) + (eventCounts.SessionUnlock || 0) + (eventCounts.Lock || 0) + (eventCounts.Unlock || 0) + (eventCounts['Screen Lock'] || 0) + (eventCounts['Screen Unlock'] || 0),
+        sleepWake: (eventCounts.Sleep || 0) + (eventCounts.Wakeup || 0) + (eventCounts['Wake Up'] || 0) + (eventCounts['System Wake'] || 0),
+        shutdownRestart: (eventCounts.Shutdown || 0) + (eventCounts['System Shutdown'] || 0) + (eventCounts['Unexpected Shutdown'] || 0) + (eventCounts['Abrupt Shutdown'] || 0) + (eventCounts.Restart || 0) + (eventCounts['System Restart'] || 0),
+        sleepMs: durationFor(['Wakeup', 'System Wake', 'Wake Up']),
         activeMs: durationFor(['Active Usage', 'Active State', 'Active Application']),
         idleMs: durationFor(['Idle Time', 'Idle State', 'Inactive Duration']),
         sessionDurationMs,
@@ -587,6 +597,7 @@ router.get('/users/:userId/activity', async (req, res, next) => {
 
     const events = await SystemEvent.find({
       $or: compactOrQuery([{ user: userId }, { employeeName: userId }, { employeeId: userId }, { employee: userId.match(/^[a-f\d]{24}$/i) ? userId : null }]),
+      event: { $in: [...ALLOWED_EVENTS] },
       occurredAt: {
         $gte: from,
         $lte: to,
@@ -681,4 +692,3 @@ router.post('/ingest', async (req, res, next) => {
 });
 
 module.exports = router;
-

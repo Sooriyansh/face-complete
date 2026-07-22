@@ -8,6 +8,34 @@ const { getWorkSchedule } = require('../../services/workSchedule');
 const { deleteImages, uploadImageBuffer } = require('../../services/cloudinary');
 const { hashPassword, setAuthCookie, verifyPassword } = require('../../services/auth/auth.service');
 
+const TRACKED_ACTIVITY_EVENTS = [
+  'Login',
+  'Logout',
+  'Employee Login',
+  'Employee Logout',
+  'Windows Login',
+  'Windows Logout',
+  'Windows Sign In',
+  'Windows Sign Out',
+  'User Session Start',
+  'User Session End',
+  'Session Connect',
+  'Session Disconnect',
+  'Sleep',
+  'Wakeup',
+  'Wake Up',
+  'System Wake',
+  'Startup',
+  'System Startup',
+  'Laptop Startup',
+  'Shutdown',
+  'System Shutdown',
+  'Unexpected Shutdown',
+  'Abrupt Shutdown',
+  'Restart',
+  'System Restart',
+];
+
 async function getEmployeePageData(req) {
     let employeeQuery = {};
     if (req.user && req.user.role === 'employee') {
@@ -43,6 +71,7 @@ async function getEmployeePageData(req) {
             { employeeName: employee.name || '' },
             { user: employee.name || '' },
           ]),
+          event: { $in: TRACKED_ACTIVITY_EVENTS },
         }
       : { _id: null };
 
@@ -73,19 +102,14 @@ async function getEmployeePageData(req) {
     const lastEvent = (names) => todayEvents.find((event) => names.includes(event.event));
     const loginEvent = firstEvent(['Login', 'Windows Login', 'Windows Sign In', 'User Session Start', 'Session Connect']);
     const logoutEvent = lastEvent(['Logout', 'Windows Logout', 'Windows Sign Out', 'User Session End', 'Session Disconnect']);
-    const activeMs = Number(workSession?.activeMs || 0) + eventDuration(['Active Usage', 'Active State', 'Active Application']);
-    const idleMs = Number(workSession?.idleMs || 0) + eventDuration(['Idle Time', 'Idle State', 'Inactive Duration']);
-    const workingMs = Number(workSession?.totalWorkingMs || 0) || (workSession?.startedAt ? Math.max(new Date(workSession.checkoutAt || Date.now()).getTime() - new Date(workSession.startedAt).getTime(), 0) : activeMs + idleMs);
+    const sleepMs = Number(workSession?.sleepMs || 0) + eventDuration(['Wakeup', 'Wake Up', 'System Wake']);
+    const workingMs = Number(workSession?.totalWorkingMs || 0) || (workSession?.startedAt ? Math.max(new Date(workSession.checkoutAt || Date.now()).getTime() - new Date(workSession.startedAt).getTime(), 0) : 0);
     const latestName = latestEvent?.event || '';
-    const currentStatus = ['Agent Offline', 'Shutdown', 'Unexpected Shutdown', 'Network Offline', 'Internet Disconnected'].includes(latestName)
+    const currentStatus = ['Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown'].includes(latestName)
       ? 'Offline'
-      : ['Idle Time', 'Idle State', 'Inactive Duration'].includes(latestName)
-        ? 'Idle'
-        : latestName === 'Sleep'
+      : latestName === 'Sleep'
           ? 'Sleeping'
-          : ['Lock', 'Screen Lock'].includes(latestName)
-            ? 'Locked'
-            : latestEvent
+          : latestEvent
               ? 'Online'
               : 'Not connected';
     
@@ -98,18 +122,19 @@ async function getEmployeePageData(req) {
       workSchedule,
       currentStatus,
       desktopAgentStatus: latestEvent ? (latestName === 'Agent Offline' ? 'Offline' : 'Connected') : 'Not connected',
-      internetStatus: ['Internet Disconnected', 'Network Offline'].includes(latestName) ? 'Offline' : ['Internet Connected', 'Network Online'].includes(latestName) ? 'Online' : 'Unknown',
+      internetStatus: 'Not tracked',
       machineStatus: latestEvent?.hostname || latestEvent?.computer || latestEvent?.machineId || 'Unknown',
       todayWorkingMs: workingMs,
-      todayActiveMs: activeMs,
-      todayIdleMs: idleMs,
+      todayActiveMs: 0,
+      todayIdleMs: 0,
+      todaySleepMs: sleepMs,
       loginTime: loginEvent?.occurredAt || workSession?.startedAt || null,
       logoutTime: logoutEvent?.occurredAt || workSession?.checkoutAt || null,
       joinWorkTime: workSession?.startedAt || null,
       leaveWorkTime: workSession?.checkoutAt || null,
       signInCount: activitySummary.signInCount,
-      lockUnlockCount: activitySummary.lockUnlockCount,
       sleepWakeCount: activitySummary.sleepWakeCount,
+      powerEventCount: activitySummary.powerEventCount,
       totalActivityCount: activitySummary.totalActivityCount
     };
 }

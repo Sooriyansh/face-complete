@@ -4,11 +4,9 @@ const WorkSession = require('../models/WorkSession');
 
 const LOGIN_EVENTS = ['Login', 'Windows Login', 'Windows Sign In', 'Face Login', 'Password Login', 'Employee Login', 'User Session Start', 'Session Connect'];
 const LOGOUT_EVENTS = ['Logout', 'Windows Logout', 'Windows Sign Out', 'Employee Logout', 'User Session End', 'Session Disconnect'];
-const LOCK_UNLOCK_EVENTS = ['Lock', 'Unlock', 'Screen Lock', 'Screen Unlock'];
 const SLEEP_WAKE_EVENTS = ['Sleep', 'Wakeup', 'Wake Up', 'System Wake'];
-const POWER_EVENTS = ['Startup', 'Laptop Startup', 'Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown', 'Restart'];
-const JOIN_CHECKOUT_EVENTS = ['Join Work', 'Check Out', 'Check-Out Completed', 'Daily Report Submitted', 'Employee Joined Work'];
-const BREAK_EVENTS = ['Break Start', 'Break End'];
+const POWER_EVENTS = ['Startup', 'System Startup', 'Laptop Startup', 'Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown', 'Restart', 'System Restart'];
+const TRACKED_ACTIVITY_EVENTS = new Set([...LOGIN_EVENTS, ...LOGOUT_EVENTS, ...SLEEP_WAKE_EVENTS, ...POWER_EVENTS]);
 
 function compactOrQuery(clauses) {
   return clauses.filter((clause) => {
@@ -112,7 +110,11 @@ async function getActivityHistory({
   selectedDepartment = '',
   includeSessionEvents = true,
 } = {}) {
-  const events = await SystemEvent.find(query)
+  const scopedQuery = {
+    ...query,
+    event: query.event || { $in: [...TRACKED_ACTIVITY_EVENTS] },
+  };
+  const events = await SystemEvent.find(scopedQuery)
     .sort({ occurredAt: sortDirection })
     .limit(limit)
     .populate('employee')
@@ -136,6 +138,7 @@ async function getActivityHistory({
 
     sessionEvents = sessions
       .flatMap((session) => (session.events || []).map((event) => serializeSessionEvent(session, event)))
+      .filter((event) => TRACKED_ACTIVITY_EVENTS.has(event.event))
       .filter(sessionEventFilter({ from, to, selectedEmployee, selectedDepartment }));
   }
 
@@ -159,11 +162,8 @@ async function getEmployeeActivitySummary(employee) {
       loginCount: 0,
       logoutCount: 0,
       signInCount: 0,
-      lockUnlockCount: 0,
       sleepWakeCount: 0,
       powerEventCount: 0,
-      joinCheckoutCount: 0,
-      breakCount: 0,
       totalActivityCount: 0,
       activeMs: 0,
       idleMs: 0,
@@ -179,35 +179,28 @@ async function getEmployeeActivitySummary(employee) {
   const [
     loginCount,
     logoutCount,
-    lockUnlockCount,
     sleepWakeCount,
     powerEventCount,
-    joinCheckoutSystemCount,
     totalSystemCount,
   ] = await Promise.all([
     SystemEvent.countDocuments({ ...eventQuery, event: { $in: LOGIN_EVENTS } }),
     SystemEvent.countDocuments({ ...eventQuery, event: { $in: LOGOUT_EVENTS } }),
-    SystemEvent.countDocuments({ ...eventQuery, event: { $in: LOCK_UNLOCK_EVENTS } }),
     SystemEvent.countDocuments({ ...eventQuery, event: { $in: SLEEP_WAKE_EVENTS } }),
     SystemEvent.countDocuments({ ...eventQuery, event: { $in: POWER_EVENTS } }),
-    SystemEvent.countDocuments({ ...eventQuery, event: { $in: JOIN_CHECKOUT_EVENTS } }),
-    SystemEvent.countDocuments(eventQuery),
+    SystemEvent.countDocuments({ ...eventQuery, event: { $in: [...TRACKED_ACTIVITY_EVENTS] } }),
   ]);
 
   const activeMs = sessions.reduce((sum, session) => sum + Number(session.activeMs || 0), 0);
   const idleMs = sessions.reduce((sum, session) => sum + Number(session.idleMs || 0), 0);
   const sleepMs = sessions.reduce((sum, session) => sum + Number(session.sleepMs || 0), 0);
-  const totalSessionEvents = sessionEvents.length;
+  const totalSessionEvents = sessionEvents.filter((event) => TRACKED_ACTIVITY_EVENTS.has(event.type)).length;
 
   return {
     loginCount,
     logoutCount,
     signInCount: loginCount + logoutCount,
-    lockUnlockCount: lockUnlockCount + sessionCount(LOCK_UNLOCK_EVENTS),
     sleepWakeCount: sleepWakeCount + sessionCount(SLEEP_WAKE_EVENTS),
     powerEventCount: powerEventCount + sessionCount(POWER_EVENTS),
-    joinCheckoutCount: joinCheckoutSystemCount + sessionCount(JOIN_CHECKOUT_EVENTS),
-    breakCount: sessionCount(BREAK_EVENTS),
     totalActivityCount: totalSystemCount + totalSessionEvents,
     activeMs,
     idleMs,

@@ -23,7 +23,7 @@
         <a href="/admin/employees"><i class="fa-solid fa-users-gear"></i>Employees</a>
         <a class="active" href="/admin/system-events"><i class="fa-solid fa-timeline"></i>Activity History</a>
       </nav>
-      <div class="rbac-card"><span class="security-badge">Admin access</span><p>Filter any registered employee and inspect complete device, login, lock, attendance, and live activity history.</p></div>
+      <div class="rbac-card"><span class="security-badge">Admin access</span><p>Filter employees and inspect website login/logout, sleep, wake, startup, shutdown, and restart history.</p></div>
       <form action="/logout" method="POST" class="logout-form"><button type="submit">Logout</button></form>
     </aside>
 
@@ -42,7 +42,7 @@
         <div>
           <span class="status-chip"><span class="live-dot"></span> Live security timeline dashboard</span>
           <h1>Activity History</h1>
-          <p>Track employee Windows device activity and work sessions in real time.</p>
+          <p>Track employee website login/logout, sleep mode, wakeups, startup, shutdown, and restart records.</p>
         </div>
         <div class="hero-actions">
           <button id="refresh-system-events" class="btn btn-primary"><i class="fa-solid fa-rotate-right"></i> Refresh Activity</button>
@@ -65,7 +65,7 @@
       <section class="metric-grid compact reveal">
         <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-clock"></i></span><p>Tracking Window</p><strong id="system-events-range"><% if (safeRange) { %><%= new Date(safeRange.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %> - <%= new Date(safeRange.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) %><% } else { %>08:00 - Now<% } %></strong></div>
         <div class="metric-card"><span class="metric-icon"><i class="fa-solid fa-bolt"></i></span><p>Total Events</p><strong id="system-events-count"><%= safeSystemEvents.length %></strong></div>
-        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-lock"></i></span><p>Lock/Unlock</p><strong id="system-events-lock-count">0</strong></div>
+        <div class="metric-card"><span class="metric-icon violet"><i class="fa-solid fa-lock"></i></span><p>Lock / Unlock</p><strong id="system-events-lock-count">0</strong></div>
         <div class="metric-card"><span class="metric-icon success"><i class="fa-solid fa-satellite-dish"></i></span><p>Live Sync Status</p><strong id="system-events-sync">Waiting</strong></div>
       </section>
 
@@ -80,8 +80,9 @@
         <button type="button" class="event-type-card" data-event-filter="Startup"><i class="fa-solid fa-power-off"></i><strong>Startup</strong><span>Boot detection</span></button>
         <button type="button" class="event-type-card" data-event-filter="Shutdown"><i class="fa-solid fa-plug-circle-xmark"></i><strong>Shutdown</strong><span>Power-off log</span></button>
         <button type="button" class="event-type-card" data-event-filter="Sleep,Wakeup,System Wake"><i class="fa-solid fa-moon"></i><strong>Sleep/Wakeup</strong><span>Session continuity</span></button>
-        <button type="button" class="event-type-card" data-event-filter="Windows Sign In,Windows Sign Out,Login,Logout,User Session Start,User Session End,Session Connect,Session Disconnect"><i class="fa-solid fa-right-to-bracket"></i><strong>Sign In/Logout</strong><span>User access</span></button>
-        <button type="button" class="event-type-card" data-event-filter="Screen Lock,Screen Unlock,Lock,Unlock"><i class="fa-solid fa-lock"></i><strong>Lock/Unlock</strong><span>Screen security</span></button>
+        <button type="button" class="event-type-card" data-event-filter="SessionLogon,SessionLogoff,Windows Sign In,Windows Sign Out,Login,Logout,User Session Start,User Session End,Session Connect,Session Disconnect"><i class="fa-solid fa-right-to-bracket"></i><strong>Sign In/Logout</strong><span>User access</span></button>
+        <button type="button" class="event-type-card" data-event-filter="Startup,System Startup,Laptop Startup,Shutdown,System Shutdown,Unexpected Shutdown,Abrupt Shutdown,Restart,System Restart"><i class="fa-solid fa-plug-circle-bolt"></i><strong>Power Events</strong><span>Startup and shutdown</span></button>
+        <button type="button" class="event-type-card" data-event-filter="SessionLock,SessionUnlock,SessionLogon,SessionLogoff,Lock,Unlock,Screen Lock,Screen Unlock,Windows Sign In,Windows Sign Out,Session Connect,Session Disconnect"><i class="fa-solid fa-lock"></i><strong>Windows Sessions</strong><span>Lock, unlock, logon and logoff</span></button>
         <button type="button" class="event-type-card" data-event-filter="Active Application,Application Switch,Website Visited,Application Started,Application Stopped"><i class="fa-solid fa-window-restore"></i><strong>Apps/Websites</strong><span>Foreground usage</span></button>
       </section>
 
@@ -122,7 +123,7 @@
           <div>
             <p class="eyebrow">Timeline</p>
             <h2>Complete Activity Timeline</h2>
-            <p id="system-events-status" class="helper-text">Select an employee to show only that employee's attendance history, system events, device activity, login/logout logs, and lock/unlock history.</p>
+            <p id="system-events-status" class="helper-text">Select an employee to show only login/logout, sleep, wake, startup, shutdown, and restart history.</p>
           </div>
           <span class="panel-badge">Live events stream</span>
         </div>

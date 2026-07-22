@@ -4,12 +4,11 @@ Production Windows employee activity collector for the FaceAI Attendance server.
 
 ## What it captures
 
-- Windows sign in/out, lock/unlock, sleep/wake, shutdown/restart from Event Viewer.
-- Idle, active, session duration, last activity, boot time, uptime.
-- Network online/offline.
-- Active application/window switches.
-- Supported browser foreground usage for Chrome, Edge, Firefox, Brave, and Opera.
-- Process start/stop events from real process snapshots.
+- Startup, shutdown/restart, sleep/wake, SessionLock, SessionUnlock, SessionLogon, and SessionLogoff from Windows Event Viewer.
+- Sleep duration, calculated when Windows wakes after a sleep event.
+- Offline buffering with automatic retry, plus a live heartbeat while the agent is running.
+
+Website login/logout is recorded by the main FaceAI web app. The Windows agent also keeps the existing active/idle, browser, network, foreground-app, process, power, and Windows-session collectors enabled.
 
 The agent does not generate demo data. Events are sent to `/api/system-events/ingest` with `x-collector-token` and are deduplicated by `externalId`.
 

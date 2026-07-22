@@ -47,15 +47,18 @@ async function main() {
     throw new Error('SYSTEM_EVENTS_COLLECTOR_TOKEN or FACEAI_COLLECTOR_TOKEN is required.');
   }
 
-  await syncEvents([baseEvent('Agent Online', 'Windows activity agent started.', { status: 'Online', unique: `agent-online:${Date.now()}` })]);
+  await syncEvents([baseEvent('Agent Online', 'Windows activity agent started.', { status: 'Online', unique: `agent-online:${config.sessionId}` })]);
   await tick();
 
   if (once) return;
   logger.info(`FaceAI Windows activity agent running every ${config.pollIntervalMs / 1000}s.`);
   setInterval(tick, config.pollIntervalMs);
 
+  let stopping = false;
   const stop = async () => {
-    await syncEvents([baseEvent('Agent Offline', 'Windows activity agent stopped.', { status: 'Offline', unique: `agent-offline:${Date.now()}` })]).catch(() => {});
+    if (stopping) return;
+    stopping = true;
+    await syncEvents([baseEvent('Agent Offline', 'Windows activity agent stopped.', { status: 'Offline', unique: `agent-offline:${config.sessionId}` })]).catch(() => {});
     process.exit(0);
   };
   process.on('SIGINT', stop);

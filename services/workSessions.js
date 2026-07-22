@@ -60,9 +60,11 @@ function mapEventCategory(type) {
       'Idle Time',
       'Idle State',
       'Inactive Duration',
+      'Employee Login',
+      'Employee Logout',
     ].includes(type)
   ) {
-    return 'productivity';
+    return ['Employee Login', 'Employee Logout'].includes(type) ? 'session' : 'productivity';
   }
 
   if (['Session Started', 'Session Incomplete', 'Session Closed', 'Join Work', 'Check Out', 'Overtime Started', 'Overtime Ended'].includes(type)) {
@@ -79,11 +81,22 @@ function normalizeEventType(type) {
     'Unexpected Shutdown': 'Abrupt Shutdown',
     Restart: 'Restart',
     Sleep: 'Sleep',
+    Wake: 'Wake Up',
     Wakeup: 'Wake Up',
+    'Wake Up': 'Wake Up',
+    'System Wake': 'Wake Up',
+    SessionLock: 'Lock',
+    SessionUnlock: 'Unlock',
+    SessionLogon: 'Windows Login',
+    SessionLogoff: 'Windows Logout',
+    'Screen Lock': 'Lock',
+    'Screen Unlock': 'Unlock',
     Lock: 'Lock',
     Unlock: 'Unlock',
     Login: 'Windows Login',
     Logout: 'Windows Logout',
+    'Employee Login': 'Employee Login',
+    'Employee Logout': 'Employee Logout',
     'Display On': 'Display On',
     'Display Off': 'Display Off',
     'User Session Start': 'User Session Start',
@@ -173,13 +186,13 @@ function deriveSessionStatus(session, now = new Date()) {
     return 'active';
   }
 
+  if (session.deviceState === 'Sleep') {
+    return 'sleep';
+  }
+
   const idleMinutes = (now.getTime() - lastActivityAt.getTime()) / 60000;
   if (idleMinutes >= 15) {
     return 'idle';
-  }
-
-  if (session.deviceState === 'Sleep') {
-    return 'sleep';
   }
 
   return session.status === 'break' ? 'break' : 'active';
@@ -408,28 +421,14 @@ async function recordTrackingEvent(rawEvent) {
   session.incompleteReason = isAbruptShutdown ? 'Laptop shut down before checkout.' : session.incompleteReason;
   session.productivityScore = calculateProductivityScore(session);
 
-  if (type === 'Idle Time') {
-    session.idleMs += durationMs;
-  }
-
-  if (type === 'Active Usage') {
-    session.activeMs += durationMs;
-  }
-
-  if (type === 'Idle State') {
-    session.idleMs += durationMs;
-  }
-
-  if (type === 'Active State') {
-    session.activeMs += durationMs;
-  }
-
+  if (type === 'Idle Time' || type === 'Idle State') session.idleMs += durationMs;
+  if (type === 'Active Usage' || type === 'Active State') session.activeMs += durationMs;
   if (type === 'Inactive Duration') {
     session.inactiveMs += durationMs;
     session.idleMs += durationMs;
   }
 
-  if (type === 'Sleep') {
+  if (type === 'Sleep' || type === 'Wake Up') {
     session.sleepMs += durationMs;
   }
 

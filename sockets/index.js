@@ -59,14 +59,28 @@ function initializeSockets(server, app) {
 
   io.on('connection', (socket) => {
     if (socket.trustedCollector) {
+      const agentId = String(socket.handshake.auth?.agentId || socket.id);
+      const machineId = String(socket.handshake.auth?.machineId || '');
       socket.join('collectors:system-events');
       socket.emit('collector:ready', {
         socketId: socket.id,
         recovered: socket.recovered === true,
       });
       socket.on('collector:heartbeat', (payload = {}, ack) => {
-        const response = { ok: true, receivedAt: new Date().toISOString(), payloadId: payload.id || null };
+        const receivedAt = new Date().toISOString();
+        const presence = { agentId, machineId, status: 'online', receivedAt, ...payload };
+        if (app) {
+          app.locals.collectorHeartbeats ||= new Map();
+          app.locals.collectorHeartbeats.set(agentId, presence);
+        }
+        io.to(roleRoom('admin')).emit('collector:presence', presence);
+        const response = { ok: true, receivedAt, payloadId: payload.id || null };
         if (typeof ack === 'function') ack(response);
+      });
+      socket.on('disconnect', () => {
+        const presence = { agentId, machineId, status: 'offline', receivedAt: new Date().toISOString() };
+        if (app?.locals.collectorHeartbeats) app.locals.collectorHeartbeats.set(agentId, presence);
+        io.to(roleRoom('admin')).emit('collector:presence', presence);
       });
       return;
     }

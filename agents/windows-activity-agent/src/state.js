@@ -23,6 +23,7 @@ function loadState() {
     networkOnline: null,
     internetConnected: null,
     idle: false,
+    lastSleepAt: null,
     sessionStartedAt: new Date().toISOString(),
   });
 }

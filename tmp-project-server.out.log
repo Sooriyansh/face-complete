@@ -1,0 +1,6 @@
+
+> hyy@1.0.0 start
+> node index.js
+
+◇ injected env (23) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+MongoDB connected

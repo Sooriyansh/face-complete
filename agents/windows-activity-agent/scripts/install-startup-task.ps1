@@ -22,6 +22,7 @@ Register-ScheduledTask `
   -Action $action `
   -Trigger $trigger `
   -Settings $settings `
+  -RunLevel Highest `
   -Description "FaceAI real Windows employee activity tracking agent." `
   -Force | Out-Null
 

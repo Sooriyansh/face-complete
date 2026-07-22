@@ -20,7 +20,7 @@ function eventTypeFor(name) {
   if (['Idle Time', 'Idle State', 'Active Usage', 'Active State', 'Inactive Duration'].includes(name)) return 'activity';
   if (name === 'Website Visited') return 'browser';
   if (['Application Switch', 'Active Application', 'Application Started', 'Application Stopped'].includes(name)) return 'application';
-  if (['Screen Lock', 'Screen Unlock', 'Windows Sign In', 'Windows Sign Out', 'Session Connect', 'Session Disconnect'].includes(name)) return 'session';
+  if (['SessionLock', 'SessionUnlock', 'SessionLogon', 'SessionLogoff', 'Screen Lock', 'Screen Unlock', 'Windows Sign In', 'Windows Sign Out', 'Session Connect', 'Session Disconnect'].includes(name)) return 'session';
   return 'system';
 }
 
@@ -71,7 +71,7 @@ async function collectEventLogEvents(state) {
   const script = `
     $maps = @{
       System = @(6005,6006,6008,1074,42,1);
-      Security = @(4800,4801,4624,4634,4778,4779)
+      Security = @(4800,4801,4624,4634,4647,4778,4779)
     }
     $rows = @()
     foreach ($log in $maps.Keys) {
@@ -101,12 +101,13 @@ async function collectEventLogEvents(state) {
     6008: ['Unexpected Shutdown', 'Windows detected an unexpected shutdown.'],
     42: ['Sleep', 'The system entered sleep.'],
     1: ['System Wake', 'The system resumed from sleep.'],
-    4800: ['Screen Lock', 'The workstation was locked.'],
-    4801: ['Screen Unlock', 'The workstation was unlocked.'],
-    4624: ['Windows Sign In', 'Windows sign in was recorded.'],
-    4634: ['Windows Sign Out', 'Windows sign out was recorded.'],
-    4778: ['Session Connect', 'Windows session connected.'],
-    4779: ['Session Disconnect', 'Windows session disconnected.'],
+    4800: ['SessionLock', 'The Windows workstation was locked.'],
+    4801: ['SessionUnlock', 'The Windows workstation was unlocked.'],
+    4624: ['SessionLogon', 'A Windows user session logged on.'],
+    4634: ['SessionLogoff', 'A Windows user session logged off.'],
+    4647: ['SessionLogoff', 'A Windows user initiated logoff.'],
+    4778: ['Session Connect', 'A Windows session reconnected.'],
+    4779: ['Session Disconnect', 'A Windows session disconnected.'],
   };
 
   list
@@ -121,9 +122,19 @@ async function collectEventLogEvents(state) {
         eventName = message.includes('restart') || message.includes('reboot') ? 'Restart' : 'Shutdown';
         meaning = eventName === 'Restart' ? 'Windows restart was initiated.' : 'Windows shutdown was initiated.';
       }
+      const occurredAt = new Date(row.TimeCreated);
+      let durationMs = 0;
+      if (Number(row.Id) === 42) {
+        state.lastSleepAt = occurredAt.toISOString();
+      }
+      if (Number(row.Id) === 1 && state.lastSleepAt) {
+        durationMs = Math.max(occurredAt.getTime() - new Date(state.lastSleepAt).getTime(), 0);
+        state.lastSleepAt = null;
+      }
       events.push(baseEvent(eventName, meaning, {
         occurredAt: row.TimeCreated,
         eventId: row.Id,
+        durationMs,
         sourceLog: row.LogName,
         provider: row.ProviderName,
         recordNumber: recordId,

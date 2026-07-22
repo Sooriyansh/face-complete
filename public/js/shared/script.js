@@ -1045,31 +1045,6 @@ function startEmployeeActivityCollector() {
   if (!consolePanel) {
     return;
   }
-
-  sendEmployeeActivity('Active State', { message: 'Employee work session page became active.' }).catch(() => {});
-
-  let lastInteraction = Date.now();
-  ['keydown', 'mousemove', 'click'].forEach((eventName) => {
-    window.addEventListener(eventName, () => {
-      lastInteraction = Date.now();
-    });
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    const type = document.hidden ? 'Idle State' : 'Active State';
-    sendEmployeeActivity(type, { message: document.hidden ? 'Employee workspace moved to background.' : 'Employee workspace active again.' }).catch(() => {});
-  });
-
-  window.setInterval(() => {
-    const idleMs = Date.now() - lastInteraction;
-    const type = idleMs > 120000 ? 'Idle State' : 'Active State';
-    sendEmployeeActivity(type, {
-      durationMs: idleMs > 120000 ? idleMs : 60000,
-      message: idleMs > 120000 ? 'No keyboard or mouse activity detected.' : 'Keyboard/mouse activity detected.',
-    })
-      .then(loadDailyWorkSession)
-      .catch(() => {});
-  }, 60000);
 }
 
 function renderAdminMonitoring(data) {
@@ -1107,8 +1082,8 @@ function renderAdminMonitoring(data) {
         <td><span class="person-cell"><span class="avatar">${String(employee.name || 'EM').slice(0, 2).toUpperCase()}</span><strong>${employee.name || 'Employee'}</strong></span></td>
         <td><span class="status-badge status-${status}">${row.deviceState || normalizeStatusLabel(status)}</span></td>
         <td>${row.laptopOnSince ? new Date(row.laptopOnSince).toLocaleTimeString() : '-'}</td>
-        <td>${formatShortDuration(row.activeMs)}</td>
-        <td>${formatShortDuration(row.idleMs)}</td>
+        <td>${formatShortDuration(row.sleepMs)}</td>
+        <td>${row.checkoutTime ? 'Checked out' : '-'}</td>
         <td>${formatShortDuration(row.sleepMs)}</td>
         <td>${row.lastActivity ? new Date(row.lastActivity).toLocaleTimeString() : '-'}</td>
         <td>${row.attendanceTime ? new Date(row.attendanceTime).toLocaleTimeString() : '-'}</td>
@@ -2195,17 +2170,15 @@ function updateEmployeeActivityStatus(event) {
 
   const name = event.event || '';
   if (statusEl) {
-    if (['Agent Offline', 'Shutdown', 'Unexpected Shutdown', 'Network Offline', 'Internet Disconnected'].includes(name)) statusEl.textContent = 'Offline';
-    else if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(name)) statusEl.textContent = 'Idle';
+    if (['Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown'].includes(name)) statusEl.textContent = 'Offline';
     else if (name === 'Sleep') statusEl.textContent = 'Sleeping';
-    else if (['Lock', 'Screen Lock'].includes(name)) statusEl.textContent = 'Locked';
     else statusEl.textContent = 'Online';
   }
-  if (internetEl && ['Internet Connected', 'Network Online', 'Internet Disconnected', 'Network Offline'].includes(name)) {
-    internetEl.textContent = ['Internet Connected', 'Network Online'].includes(name) ? 'Online' : 'Offline';
+  if (internetEl) {
+    internetEl.textContent = 'Not tracked';
   }
-  if (agentEl && ['Agent Online', 'Agent Offline'].includes(name)) {
-    agentEl.textContent = name === 'Agent Online' ? 'Connected' : 'Offline';
+  if (agentEl) {
+    agentEl.textContent = 'Power events only';
   }
   if (machineEl && (event.hostname || event.computer || event.machineId)) {
     machineEl.textContent = event.hostname || event.computer || event.machineId;
@@ -3777,9 +3750,9 @@ const NotificationCenter = (() => {
       el.textContent = String((Number.isFinite(current) ? current : 0) + amount);
     };
 
-    const loginEvents = ['Login', 'Logout', 'Windows Login', 'Windows Logout', 'Face Login', 'Password Login', 'Employee Login', 'User Session Start', 'User Session End', 'Session Connect', 'Session Disconnect'];
-    const lockEvents = ['Lock', 'Unlock', 'Screen Lock', 'Screen Unlock'];
-    const sleepEvents = ['Sleep', 'Wakeup', 'Wake Up'];
+    const loginEvents = ['Login', 'Logout', 'SessionLogon', 'SessionLogoff', 'Windows Login', 'Windows Logout', 'Face Login', 'Password Login', 'Employee Login', 'User Session Start', 'User Session End', 'Session Connect', 'Session Disconnect'];
+    const lockEvents = ['SessionLock', 'SessionUnlock', 'Lock', 'Unlock', 'Screen Lock', 'Screen Unlock'];
+    const sleepEvents = ['Sleep', 'Wake', 'Wakeup', 'Wake Up', 'System Wake'];
 
     socket.on('system_event:new', (event) => {
       const type = event.event || event.type || '';
@@ -3804,10 +3777,14 @@ const NotificationCenter = (() => {
       if (evtCountEl) evtCountEl.textContent = session.events ? session.events.length : 0;
       
       const activeEl = document.getElementById('session-active-time');
-      if (activeEl) activeEl.textContent = Math.round((session.activeMs || 0) / 60000) + ' min';
+      if (activeEl) activeEl.textContent = Math.round((session.sleepMs || 0) / 60000) + ' min';
       
       const idleEl = document.getElementById('session-idle-time');
-      if (idleEl) idleEl.textContent = Math.round((session.idleMs || 0) / 60000) + ' min';
+      if (idleEl) idleEl.textContent = (session.events || []).filter((event) => ['Laptop Startup', 'Shutdown', 'Abrupt Shutdown', 'Restart'].includes(event.type)).length;
+    });
+    socket.on('collector:presence', (presence) => {
+      const syncEl = document.getElementById('system-events-sync');
+      if (syncEl) syncEl.textContent = presence.status === 'online' ? 'Live' : 'Offline';
     });
   }
 

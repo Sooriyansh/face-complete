@@ -5,6 +5,34 @@ const Notification = require('../../models/Notification');
 const Student = require('../../models/Student');
 const SystemEvent = require('../../models/SystemEvent');
 const WorkSession = require('../../models/WorkSession');
+
+const TRACKED_ACTIVITY_EVENTS = [
+  'Login',
+  'Logout',
+  'Employee Login',
+  'Employee Logout',
+  'Windows Login',
+  'Windows Logout',
+  'Windows Sign In',
+  'Windows Sign Out',
+  'User Session Start',
+  'User Session End',
+  'Session Connect',
+  'Session Disconnect',
+  'Sleep',
+  'Wakeup',
+  'Wake Up',
+  'System Wake',
+  'Startup',
+  'System Startup',
+  'Laptop Startup',
+  'Shutdown',
+  'System Shutdown',
+  'Unexpected Shutdown',
+  'Abrupt Shutdown',
+  'Restart',
+  'System Restart',
+];
 const { getWorkSchedule } = require('../../services/workSchedule');
 
 const MS_PER_HOUR = 60 * 60 * 1000;
@@ -330,7 +358,7 @@ async function systemEventsPage(req, res, next) {
     const rangeEnd = now < workdayEnd ? now : workdayEnd;
 
     const [systemEvents, students, liveSessions] = await Promise.all([
-      SystemEvent.find().sort({ occurredAt: -1 }).limit(100).lean(),
+      SystemEvent.find({ event: { $in: TRACKED_ACTIVITY_EVENTS } }).sort({ occurredAt: -1 }).limit(100).lean(),
       Student.find().sort({ name: 1 }).lean(),
       WorkSession.find({ dateKey: now.toISOString().slice(0, 10) }).populate('employee').populate('attendance').lean(),
     ]);
@@ -347,14 +375,13 @@ async function systemEventsPage(req, res, next) {
         || latestByEmployee.get(student.name || '');
       let status = session?.status === 'checked_out' ? 'Offline' : session ? 'Online' : 'Offline';
       const latestEvent = latest?.event || '';
-      if (['Idle Time', 'Idle State', 'Inactive Duration'].includes(latestEvent)) status = 'Idle';
-      if (['Lock', 'Screen Lock'].includes(latestEvent)) status = 'Locked';
-      if (['Shutdown', 'Unexpected Shutdown', 'Agent Offline', 'Network Offline'].includes(latestEvent)) status = 'Offline';
+      if (['Shutdown', 'System Shutdown', 'Unexpected Shutdown', 'Abrupt Shutdown'].includes(latestEvent)) status = 'Offline';
+      if (latestEvent === 'Sleep') status = 'Sleeping';
       return {
         employeeId: String(student._id),
         status,
         lastActivityAt: latest?.occurredAt || session?.lastActivityAt || session?.updatedAt || null,
-        activeApplication: latest?.metadata?.processName || latest?.metadata?.application || latest?.metadata?.windowTitle || '',
+        activeApplication: '',
       };
     });
 

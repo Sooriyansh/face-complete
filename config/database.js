@@ -39,7 +39,11 @@ async function connectDatabase() {
   } catch (error) {
     const explanation = explainMongoConnectionError(error, mongoUri);
     console.error(`MongoDB connection error: ${explanation}`);
-    console.error(`Set MONGO_URI in .env. For local development use: ${DEFAULT_LOCAL_MONGO_URI}`);
+    if (process.env.MONGO_URI) {
+      console.error('MONGO_URI is loaded from env. If this is Atlas, check Network Access/IP allowlist, cluster status, username/password, and DNS/firewall settings.');
+    } else {
+      console.error(`Set MONGO_URI in .env. For local development use: ${DEFAULT_LOCAL_MONGO_URI}`);
+    }
     if (process.env.MONGO_REQUIRED !== 'false') {
       throw error;
     }
